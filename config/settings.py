@@ -37,7 +37,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Third-party apps
+    'ninja',
+    'ninja_jwt',
+    'ninja_extra',
     # Local apps
+    'profiles',
     'leagues',
     'competition',
 ]

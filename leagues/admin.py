@@ -1,7 +1,7 @@
 from django.contrib import admin
-from .models import Organization, Season, Team, Player, Game
+from .models import Organization, Season, Team
 
-models_to_register = [Organization, Season, Team, Player, Game]
+models_to_register = [Organization, Season, Team]
 
 for model in models_to_register:
     # Create a dynamic subclass of ModelAdmin for each model

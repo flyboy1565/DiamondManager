@@ -59,21 +59,3 @@ class TeamUpdateSchema(Schema):
     name: Optional[str] = None
     color: Optional[str] = None
 
-# --- Player ---
-class PlayerSchema(Schema):
-    id: UUID
-    team_id: UUID
-    first_name: str
-    last_name: str
-    jersey_number: Optional[int] = None
-
-class PlayerCreateSchema(Schema):
-    team_id: UUID
-    first_name: str
-    last_name: str
-    jersey_number: Optional[int] = None
-
-class PlayerUpdateSchema(Schema):
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    jersey_number: Optional[int] = None

@@ -21,7 +21,7 @@ class Game(models.Model):
         return f"{self.home_team} vs {self.away_team} - {self.date_time.strftime('%m/%d')}"
 
 class PlayerGameStat(models.Model):
-    player = models.ForeignKey('leagues.Player', on_delete=models.CASCADE)
+    player = models.ForeignKey('profiles.Player', on_delete=models.CASCADE)
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='player_stats')
     
     # Baseball example - customize as needed
@@ -29,6 +29,9 @@ class PlayerGameStat(models.Model):
     hits = models.PositiveIntegerField(default=0)
     runs = models.PositiveIntegerField(default=0)
     rbi = models.PositiveIntegerField(default=0)
+    innings_pitched = models.DecimalField(max_digits=4, decimal_places=1, default=0.0)
+    strikeouts_thrown = models.PositiveIntegerField(default=0)
+    pitches_thrown = models.PositiveIntegerField(default=0)    
     
     class Meta:
         unique_together = ('player', 'game') # One stat entry per player per game

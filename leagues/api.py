@@ -3,10 +3,15 @@ from uuid import UUID
 from ninja import Router
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
-from .models import Organization, Team, Player, Season
-from . import schemas
 
-router = Router()
+from ninja_jwt.authentication import JWTAuth
+
+from .models import Organization, Team, Season
+from . import schemas
+from profiles.models import Player
+import profiles.schemas as profile_schemas 
+
+router = Router(auth=JWTAuth())
 
 
 # --- ORGANIZATION ENDPOINTS ---
@@ -14,8 +19,10 @@ router = Router()
 def list_organizations(request):
     return Organization.objects.all()
 
-@router.post("/organizations", response={201: schemas.OrganizationSchema})
+@router.post("/organizations", response={201: schemas.OrganizationSchema, 403: dict})
 def create_organization(request, data: schemas.OrganizationCreateSchema):
+    if request.auth.profile.role != "ORG_OWNER":
+        return 403, {"message": "You do not have permission to create an organization."}
     return 201, Organization.objects.create(**data.dict())
 
 @router.put("/organizations/{org_id}", response=schemas.OrganizationSchema)
@@ -82,23 +89,7 @@ def update_team(request, team_id: UUID, data: schemas.TeamUpdateSchema):
     return get_team(request, team.id)
 
 # --- PLAYER ENDPOINTS ---
-@router.get("/teams/{team_id}/players", response=List[schemas.PlayerSchema])
+@router.get("/teams/{team_id}/players", response=List[profile_schemas.PlayerSchema])
 def list_players(request, team_id: UUID):
     return Player.objects.filter(team_id=team_id)
 
-@router.post("/players", response={201: schemas.PlayerSchema})
-def create_player(request, data: schemas.PlayerCreateSchema):
-    return 201, Player.objects.create(**data.dict())
-
-@router.put("/players/{player_id}", response=schemas.PlayerSchema)
-def update_player(request, player_id: UUID, data: schemas.PlayerUpdateSchema):
-    player = get_object_or_404(Player, id=player_id)
-    for attr, value in data.dict(exclude_unset=True).items():
-        setattr(player, attr, value)
-    player.save()
-    return player
-
-@router.delete("/players/{player_id}")
-def delete_player(request, player_id: UUID):
-    get_object_or_404(Player, id=player_id).delete()
-    return {"success": True}
