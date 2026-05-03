@@ -50,9 +50,11 @@ class PlayerMembershipSchema(Schema):
     is_active: bool
 
 class PlayerSchema(Schema):
-    id: UUID
+    id: int
     first_name: str
     last_name: str
+    date_of_birth: Optional[str] = None
+    guardian_id: int
     team_history: List[PlayerMembershipSchema]
 
 class PlayerCreateSchema(Schema):

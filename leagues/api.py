@@ -91,5 +91,7 @@ def update_team(request, team_id: UUID, data: schemas.TeamUpdateSchema):
 # --- PLAYER ENDPOINTS ---
 @router.get("/teams/{team_id}/players", response=List[profile_schemas.PlayerSchema])
 def list_players(request, team_id: UUID):
-    return Player.objects.filter(team_id=team_id)
+    # Players are linked to teams through PlayerMembership.team,
+    # so filter by the related membership record instead of a nonexistent player.team_id field.
+    return Player.objects.filter(team_history__team_id=team_id).prefetch_related('team_history')
 

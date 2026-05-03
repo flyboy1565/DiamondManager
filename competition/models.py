@@ -15,10 +15,32 @@ class Game(models.Model):
     
     home_score = models.PositiveIntegerField(default=0)
     away_score = models.PositiveIntegerField(default=0)
+    is_live = models.BooleanField(default=False)
+    current_inning = models.PositiveIntegerField(default=1)
+    is_top_inning = models.BooleanField(default=True)
+    outs = models.PositiveIntegerField(default=0)
+    balls = models.PositiveIntegerField(default=0)
+    strikes = models.PositiveIntegerField(default=0)
+    pitch_count = models.PositiveIntegerField(default=0)
     is_completed = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.home_team} vs {self.away_team} - {self.date_time.strftime('%m/%d')}"
+
+class GameLineupEntry(models.Model):
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='lineup_entries')
+    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    player = models.ForeignKey('profiles.Player', on_delete=models.CASCADE)
+    batting_order = models.PositiveIntegerField()
+    position = models.CharField(max_length=50, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['batting_order']
+        unique_together = ('game', 'player')
+
+    def __str__(self):
+        return f"{self.game} - {self.player} ({self.batting_order})"
 
 class PlayerGameStat(models.Model):
     player = models.ForeignKey('profiles.Player', on_delete=models.CASCADE)

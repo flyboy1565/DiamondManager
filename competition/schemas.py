@@ -14,7 +14,29 @@ class GameSchema(Schema):
     location: str
     home_score: int
     away_score: int
+    is_live: bool
+    current_inning: int
+    is_top_inning: bool
+    outs: int
+    balls: int
+    strikes: int
+    pitch_count: int
     is_completed: bool
+
+class LineupEntrySchema(Schema):
+    id: int
+    team_id: UUID
+    team_name: str
+    player_id: int
+    player_name: str
+    batting_order: int
+    position: str | None = None
+    is_active: bool
+
+class RuleSchema(Schema):
+    title: str
+    description: str
+    category: str
 
 class GameLiveUpdateSchema(Schema):
     # Score
