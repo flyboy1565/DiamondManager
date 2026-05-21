@@ -80,6 +80,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
+# Inside your project's settings.py (typically under development/local overrides)
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'admin@diamondmanager.com'
+
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases

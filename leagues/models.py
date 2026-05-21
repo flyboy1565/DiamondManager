@@ -39,6 +39,7 @@ class Team(models.Model):
     color = models.CharField(max_length=50, blank=True)
     coaches = models.ManyToManyField(User, related_name='coaching_teams')
     icon = models.ImageField(upload_to='team_icons/', null=True, blank=True)
+    access_code = models.CharField(max_length=20, unique=True)
 
     def __str__(self):
         return self.name

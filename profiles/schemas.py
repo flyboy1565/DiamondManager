@@ -68,6 +68,22 @@ class PlayerUpdateSchema(Schema):
     last_name: Optional[str] = None
     jersey_number: Optional[int] = None    
 
+class InvitationCreateSchema(Schema):
+    email: str
+    team_id: UUID
+    player_id: Optional[int] = None
+    target_role: str = "PARENT"
+
+class InvitationAcceptSchema(Schema):
+    token: str
+    username: Optional[str] = None
+    password: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+
+class JoinTeamByCodeSchema(Schema):
+    access_code: str    
+
 # Manually rebuild only what is strictly necessary for cross-app refs
 ProfileSchema.model_rebuild()
 PlayerSchema.model_rebuild()

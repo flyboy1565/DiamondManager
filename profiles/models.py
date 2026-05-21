@@ -2,7 +2,10 @@ from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.contrib.auth.models import User
+from django.utils import timezone
 import uuid
+import secrets
+from datetime import timedelta
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
@@ -73,3 +76,34 @@ class PlayerMembership(models.Model):
     
     class Meta:
         unique_together = ('player', 'team')        
+
+class Invitation(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField()
+    token = models.CharField(max_length=64, unique=True, blank=True)
+    
+    # Contextual data to auto-assign on acceptance
+    team = models.ForeignKey('leagues.Team', on_delete=models.CASCADE, null=True, blank=True)
+    player = models.ForeignKey('profiles.Player', on_delete=models.SET_NULL, null=True, blank=True)
+    target_role = models.CharField(max_length=20, choices=Profile.ROLE_CHOICES, default='PARENT')
+    
+    invited_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_invitations')
+    is_accepted = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    def save(self, *args, **kwargs):
+        # Automatically generate a secure 64-character token if not present
+        if not self.token:
+            self.token = secrets.token_urlsafe(32)
+        # Set a default 7-day expiration time if not explicitly provided
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(days=7)
+        super().save(*args, **kwargs)
+
+    @property
+    def is_valid(self):
+        return not self.is_accepted and timezone.now() < self.expires_at
+
+    def __str__(self):
+        return f"Invite for {self.email} to join {self.team.name if self.team else 'Org'}"
