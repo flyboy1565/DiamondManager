@@ -1,30 +1,137 @@
 import csv
 import io
 from django.shortcuts import render, redirect, get_object_or_404
-from django.views.generic import CreateView, FormView
+from django.views.generic import CreateView, FormView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy, reverse
 from django.contrib import messages
 from django.core.mail import send_mail
 
+from django.views import View
+from django.contrib.auth import authenticate, login
+from django.db import transaction
+from django.contrib.auth.models import User
+from django.apps import apps
+
 from leagues.models import Team, Season  # Assuming where leagues apps reside
 from .models import Profile, Invitation, Player
 from .forms import OrganizationForm, SeasonForm, RosterImportForm
+
+class LandingPortalView(View):
+    template_name = 'profiles/admin/landing_portal.html'
+
+    def get(self, request):
+        # Render the initial entry choices
+        return render(request, self.template_name)
+
+class PortalLoginView(View):
+    def post(self, request):
+        # Handle traditional user login paths
+        user_str = request.POST.get('username')
+        pass_str = request.POST.get('password')
+        
+        user = authenticate(request, username=user_str, password=pass_str)
+        if user is not None:
+            login(request, user)
+            messages.success(request, f"Dugout session authenticated for {user.username}.")
+            return redirect('dashboard')
+        else:
+            messages.error(request, "Invalid username or password credentials.")
+            return redirect('landing_portal')
+
+class PortalRegisterOrgView(View):
+    def post(self, request):
+        # Handle atomic organization setup along with its administrator account
+        org_name = request.POST.get('org_name')
+        org_city = request.POST.get('org_city')
+        org_state = request.POST.get('org_state')
+        org_zip_code = request.POST.get('org_zip_code')
+
+        adm_user = request.POST.get('admin_user')
+        adm_email = request.POST.get('admin_email')
+        adm_pass = request.POST.get('admin_pass')
+        adm_first = request.POST.get('admin_first')
+        adm_last = request.POST.get('admin_last')
+
+        # Defensive validation checks
+        if User.objects.filter(username=adm_user).exists():
+            messages.error(request, f"The username '{adm_user}' is already registered.")
+            return redirect('landing_portal')
+
+        Organization = apps.get_model('leagues', 'Organization')
+
+        with transaction.atomic():
+            # 1. Create the new Organization model entry
+            new_org = Organization.objects.create(name=org_name, city=org_city, state=org_state, zip_code=org_zip_code)
+            
+            # 2. Build the underlying Django Admin User
+            new_admin = User.objects.create_user(
+                username=adm_user, email=adm_email, password=adm_pass,
+                first_name=adm_first, last_name=adm_last
+            )
+            
+            # 3. Elevate their access profile role context immediately
+            profile = new_admin.profile
+            profile.role = 'ORG_OWNER'
+            profile.organization = new_org
+            profile.save()
+
+            # Sign them in automatically on completion
+            login(request, new_admin)
+
+        messages.success(request, f"Ecosystem initialized successfully for '{new_org.name}'!")
+        return redirect('dashboard')
+
+class PortalVerifyTokenView(View):
+    def get(self, request):
+        # Handle passing token references directly to the REST API verification engine
+        token_str = request.GET.get('token', '').strip()
+        if not token_str:
+            messages.error(request, "Please enter a valid invitation token pass code.")
+            return redirect('landing_portal')
+            
+        # Re-route browser requests seamlessly directly into the Ninja verification route
+        return redirect(f"/api/profiles/invitations/verify/{token_str}")
+
+
+# DASHBOARD VIEW
+class DashboardView(LoginRequiredMixin, TemplateView):
+    template_name = 'profiles/admin/dashboard.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        profile = self.request.user.profile
+        
+        # Get the user's organization
+        organization = profile.organization
+        context['organization'] = organization
+        
+        if organization:
+            # Get all seasons for this organization
+            seasons = organization.seasons.all().order_by('-year', '-season')
+            context['seasons'] = seasons
+            context['has_seasons'] = seasons.exists()
+        else:
+            context['has_seasons'] = False
+            
+        return context
+
 
 # 1. STEP ONE: INITIALIZE ORGANIZATION
 class CreateOrganizationView(LoginRequiredMixin, CreateView):
     template_name = 'profiles/admin/create_org.html'
     form_class = OrganizationForm
-    success_url = reverse_lazy('create_season')
+    
+    def get_success_url(self):
+        return reverse('dashboard')
 
     def form_valid(self, form):
-        # Automatically make the creator the owner
+        # Create the organization and link it to the user's profile
         response = super().form_valid(self.object)
         profile = self.request.user.profile
         profile.role = 'ORG_OWNER'
+        profile.organization = self.object
         profile.save()
-        # Associate user with the org if your model has an explicit field/M2M
-        # self.object.owners.add(self.request.user)
         messages.success(self.request, "Organization established successfully!")
         return response
 
@@ -32,6 +139,11 @@ class CreateOrganizationView(LoginRequiredMixin, CreateView):
 class CreateSeasonView(LoginRequiredMixin, CreateView):
     template_name = 'profiles/admin/create_season.html'
     form_class = SeasonForm
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
 
     def get_success_url(self):
         return reverse('roster_onboarding', kwargs={'season_id': self.object.id})
@@ -106,3 +218,4 @@ class RosterOnboardingView(LoginRequiredMixin, FormView):
             recipient_list=[email],
             fail_silently=False,
         )
+        

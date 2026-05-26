@@ -20,6 +20,9 @@ class Profile(models.Model):
     # This links the Profile to the default Django User
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     
+    # Link to organization (optional, for org owners/admins)
+    organization = models.ForeignKey('leagues.Organization', on_delete=models.SET_NULL, null=True, blank=True, related_name='members')
+    
     # Standard Role definitions
     ROLE_CHOICES = [
         ('ADMIN', 'Global Admin'),

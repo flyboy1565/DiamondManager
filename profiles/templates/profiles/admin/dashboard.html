@@ -1,0 +1,92 @@
+{% extends 'profiles/base.html' %}
+
+{% block title %}Dashboard - DiamondManager{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-5xl">
+    <!-- Organization Header -->
+    {% if organization %}
+    <div class="bg-gradient-to-r from-slate-800 to-slate-900 border border-slate-700 rounded-2xl p-8 shadow-xl mb-8">
+        <div class="flex items-start justify-between">
+            <div>
+                <h1 class="text-4xl font-bold text-white mb-2">{{ organization.name }}</h1>
+                <p class="text-slate-400 text-lg">{{ organization.city }}, {{ organization.state }} {{ organization.zip_code }}</p>
+            </div>
+            <div class="text-right">
+                <div class="inline-block bg-emerald-500/10 text-emerald-400 text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full border border-emerald-500/20">
+                    Organization Owner
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Seasons Section -->
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-xl">
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-2xl font-bold text-white">Seasons</h2>
+            <a href="{% url 'create_season' %}" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg shadow transition">
+                + New Season
+            </a>
+        </div>
+
+        {% if has_seasons %}
+            <!-- Seasons Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for season in seasons %}
+                <div class="bg-slate-900 border border-slate-700 rounded-lg p-6 hover:border-emerald-500 transition">
+                    <div class="flex items-start justify-between mb-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-white">{{ season.season }}</h3>
+                            <p class="text-slate-400 text-sm">{{ season.year }}</p>
+                        </div>
+                        {% if season.is_active %}
+                        <span class="bg-emerald-500/20 text-emerald-300 text-xs font-bold uppercase px-2 py-1 rounded">
+                            Active
+                        </span>
+                        {% else %}
+                        <span class="bg-slate-700/50 text-slate-400 text-xs font-bold uppercase px-2 py-1 rounded">
+                            Inactive
+                        </span>
+                        {% endif %}
+                    </div>
+                    
+                    <p class="text-slate-400 text-sm mb-4">
+                        <strong>{{ season.teams.count }}</strong> team{{ season.teams.count|pluralize }}
+                    </p>
+                    
+                    <a href="{% url 'roster_onboarding' season.id %}" class="inline-block w-full text-center bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2 rounded transition">
+                        Manage Season
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <!-- No Seasons State -->
+            <div class="text-center py-12">
+                <div class="mx-auto w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mb-4">
+                    <span class="text-3xl">📅</span>
+                </div>
+                <h3 class="text-xl font-semibold text-white mb-2">No Seasons Yet</h3>
+                <p class="text-slate-400 mb-8">Start by creating your first season. You'll be able to manage teams, rosters, and games.</p>
+                <a href="{% url 'create_season' %}" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-8 rounded-lg shadow transition">
+                    Create Your First Season
+                </a>
+            </div>
+        {% endif %}
+    </div>
+
+    {% else %}
+    <!-- No Organization State -->
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-12 shadow-xl text-center">
+        <div class="mx-auto w-20 h-20 bg-slate-700/50 rounded-full flex items-center justify-center mb-6">
+            <span class="text-5xl">🏢</span>
+        </div>
+        <h2 class="text-2xl font-bold text-white mb-3">Organization Not Found</h2>
+        <p class="text-slate-400 mb-8">It looks like you don't have an organization set up yet. Create one to get started managing your league.</p>
+        <a href="{% url 'create_org' %}" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-8 rounded-lg shadow transition">
+            Create Organization
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
