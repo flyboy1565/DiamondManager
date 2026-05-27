@@ -1,0 +1,41 @@
+{% extends 'profiles/base.html' %}
+
+{% block title %}Edit Division - DiamondManager{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-2xl">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-xl">
+        <h1 class="text-3xl font-bold text-white mb-2">Edit Division</h1>
+        <p class="text-slate-400 mb-6">Change division name, template, or notes.</p>
+
+        <form method="POST" class="space-y-6">
+            {% csrf_token %}
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-2">Name</label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                    <p class="text-rose-400 text-sm mt-1">{{ form.name.errors }}</p>
+                {% endif %}
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-2">Template</label>
+                {{ form.preset_type }}
+                {% if form.preset_type.errors %}
+                    <p class="text-rose-400 text-sm mt-1">{{ form.preset_type.errors }}</p>
+                {% endif %}
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-2">Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}
+                    <p class="text-rose-400 text-sm mt-1">{{ form.notes.errors }}</p>
+                {% endif %}
+            </div>
+
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg shadow transition">Save</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

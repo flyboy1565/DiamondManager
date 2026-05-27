@@ -24,9 +24,18 @@
     <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-xl">
         <div class="flex items-center justify-between mb-6">
             <h2 class="text-2xl font-bold text-white">Seasons</h2>
-            <a href="{% url 'create_season' %}" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg shadow transition">
-                + New Season
-            </a>
+            <div class="flex items-center gap-3">
+                <form method="get" class="inline-block">
+                    {% if show_inactive %}
+                        <button type="submit" name="show_inactive" value="0" class="text-sm px-3 py-2 bg-slate-700 rounded text-slate-200">Hide Inactive</button>
+                    {% else %}
+                        <button type="submit" name="show_inactive" value="1" class="text-sm px-3 py-2 bg-slate-700 rounded text-slate-200">Show Inactive</button>
+                    {% endif %}
+                </form>
+                <a href="{% url 'create_season' %}" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg shadow transition">
+                    + New Season
+                </a>
+            </div>
         </div>
 
         {% if has_seasons %}
@@ -54,9 +63,16 @@
                         <strong>{{ season.teams.count }}</strong> team{{ season.teams.count|pluralize }}
                     </p>
                     
-                    <a href="{% url 'roster_onboarding' season.id %}" class="inline-block w-full text-center bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2 rounded transition">
-                        Manage Season
-                    </a>
+                    <div class="space-y-3">
+                        <div class="space-y-3">
+                            <a href="{% url 'season_detail' season.id %}" class="inline-block w-full text-center bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2 rounded transition">
+                                View Season
+                            </a>
+                            <a href="{% url 'create_division' season.id %}" class="inline-block w-full text-center bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 rounded transition">
+                                Add Divisions
+                            </a>
+                        </div>
+                    </div>
                 </div>
                 {% endfor %}
             </div>

@@ -19,10 +19,16 @@ class SeasonLinkSchema(Schema):
     name: str
     organization: OrganizationLinkSchema
 
-class TeamLinkSchema(Schema):
+# --- Updated to reflect Team -> Division -> Season ---
+class DivisionLinkSchema(Schema):
     id: UUID
     name: str
     season: SeasonLinkSchema
+
+class TeamLinkSchema(Schema):
+    id: UUID
+    name: str
+    division: DivisionLinkSchema  # Swapped from season: SeasonLinkSchema
 
 class TeamMembershipSchema(Schema):
     id: int
@@ -45,7 +51,7 @@ class ProfileUpdateSchema(Schema):
 
 # --- Player ---
 class PlayerMembershipSchema(Schema):
-    team_name: str # Map this from team.name
+    team_name: str 
     jersey_number: Optional[str]
     is_active: bool
 
@@ -84,7 +90,6 @@ class InvitationAcceptSchema(Schema):
 class JoinTeamByCodeSchema(Schema):
     access_code: str    
 
-# Manually rebuild only what is strictly necessary for cross-app refs
 ProfileSchema.model_rebuild()
 PlayerSchema.model_rebuild()
 

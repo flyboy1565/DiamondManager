@@ -11,12 +11,18 @@
     <nav class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex items-center justify-between shadow-lg">
         <div class="flex items-center space-x-3">
             <span class="text-2xl">💎</span>
-            <a href="#" class="text-xl font-bold tracking-wider text-emerald-400">DiamondManager</a>
+            <a href="{% url 'dashboard' %}" class="text-xl font-bold tracking-wider text-emerald-400">DiamondManager</a>
         </div>
-        <div class="space-x-4 text-sm font-medium">
+        <div class="space-x-4 text-sm font-medium flex items-center">
             {% if user.is_authenticated %}
                 <span class="text-slate-400">Welcome, {{ user.username }}</span>
-                <a href="/admin/logout/" class="text-rose-400 hover:text-rose-300 transition">Sign Out</a>
+                
+                <form method="POST" action="{% url 'admin:logout' %}" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="text-rose-400 hover:text-rose-300 transition bg-transparent border-0 p-0 cursor-pointer font-medium text-sm">
+                        Sign Out
+                    </button>
+                </form>
             {% else %}
                 <a href="#" class="text-slate-300 hover:text-white transition">Support</a>
             {% endif %}
@@ -24,10 +30,25 @@
     </nav>
 
     {% if messages %}
-    <div class="max-w-4xl mx-auto w-full mt-4 px-4">
+    <div id="toast-container" class="fixed top-4 right-4 z-50 max-w-sm w-full space-y-3 pointer-events-none">
         {% for message in messages %}
-        <div class="p-4 rounded-lg text-sm border {% if message.tags == 'success' %}bg-emerald-950/50 border-emerald-500 text-emerald-300{% else %}bg-rose-950/50 border-rose-500 text-rose-300{% endif %}">
-            {{ message }}
+        <div class="toast-message transform translate-x-full opacity-0 transition-all duration-500 ease-out p-4 rounded-lg shadow-xl border text-sm pointer-events-auto flex items-start space-x-3 {% if message.tags == 'success' %}bg-emerald-950 border-emerald-500 text-emerald-300{% else %}bg-rose-950 border-rose-500 text-rose-300{% endif %}">
+            
+            <div class="shrink-0 mt-0.5">
+                {% if message.tags == 'success' %}
+                    <svg class="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {% else %}
+                    <svg class="h-4 w-4 text-rose-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {% endif %}
+            </div>
+
+            <div class="flex-1 font-medium">
+                {{ message }}
+            </div>
+
+            <button type="button" onclick="dismissToast(this.closest('.toast-message'))" class="shrink-0 text-gray-400 hover:text-white transition">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
         </div>
         {% endfor %}
     </div>
@@ -40,6 +61,30 @@
     <footer class="bg-slate-950 text-center py-4 text-xs text-slate-500 border-t border-slate-800">
         &copy; 2026 DiamondManager. Built for the dugout.
     </footer>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const toasts = document.querySelectorAll('.toast-message');
+            
+            toasts.forEach((toast, index) => {
+                setTimeout(() => {
+                    toast.classList.remove('translate-x-full', 'opacity-0');
+                    toast.classList.add('translate-x-0', 'opacity-100');
+                }, index * 150);
 
+                setTimeout(() => {
+                    dismissToast(toast);
+                }, 30000);
+            });
+        });
+
+        function dismissToast(toast) {
+            if (!toast) return;
+            toast.classList.remove('translate-x-0', 'opacity-100');
+            toast.classList.add('translate-x-full', 'opacity-0');
+            setTimeout(() => {
+                toast.remove();
+            }, 500);
+        }
+    </script>
 </body>
 </html>

@@ -1,0 +1,43 @@
+{% extends 'profiles/base.html' %}
+
+{% block title %}Edit Team - DiamondManager{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-2xl">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-xl">
+        <h1 class="text-3xl font-bold text-white mb-2">Edit Team</h1>
+        <p class="text-slate-400 mb-6">Update team name, color, or icon.</p>
+
+        <form method="POST" enctype="multipart/form-data" class="space-y-6">
+            {% csrf_token %}
+            
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-2">{{ form.name.label }}</label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                    <p class="text-rose-400 text-sm mt-1">{{ form.name.errors }}</p>
+                {% endif %}
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-2">{{ form.color.label }}</label>
+                {{ form.color }}
+                {% if form.color.errors %}
+                    <p class="text-rose-400 text-sm mt-1">{{ form.color.errors }}</p>
+                {% endif %}
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-2">{{ form.icon.label }}</label>
+                {{ form.icon }}
+                {% if form.icon.errors %}
+                    <p class="text-rose-400 text-sm mt-1">{{ form.icon.errors }}</p>
+                {% endif %}
+            </div>
+
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg shadow transition">
+                Save Changes
+            </button>
+        </form>
+    </div>
+{% endblock %}
