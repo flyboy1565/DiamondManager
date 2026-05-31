@@ -10,63 +10,130 @@
                 <h1 class="text-3xl font-bold text-white">{{ team.name }}</h1>
                 <p class="text-slate-400">Division: {{ team.division.name }}</p>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 flex-wrap">
                 <a href="{% url 'create_coach' team.id %}" class="bg-emerald-600 text-white px-3 py-2 rounded">Add Coach</a>
                 <a href="{% url 'create_player' team.id %}" class="bg-emerald-600 text-white px-3 py-2 rounded">Add Player</a>
                 <a href="{% url 'create_game' team.id %}" class="bg-emerald-600 text-white px-3 py-2 rounded">Add Game</a>
+                <a href="{{ events_url }}" class="bg-blue-600 text-white px-3 py-2 rounded">Manage Events</a>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="md:col-span-1 bg-slate-900 border border-slate-700 rounded-lg p-4">
-                <h3 class="text-lg font-semibold text-white mb-3">Coaches</h3>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div class="lg:col-span-2 bg-slate-900 border border-slate-700 rounded-lg p-5">
+                <h3 class="text-lg font-semibold text-white mb-3">Team Summary</h3>
+                <div class="space-y-3 text-slate-300">
+                    <div class="flex items-center justify-between">
+                        <p><span class="font-semibold text-slate-100">Manager:</span> {% if manager_names %}<span class="text-slate-200">{{ manager_names|join:", " }}</span>{% else %}<span class="text-slate-400">Not assigned</span>{% endif %}</p>
+                        {% if not manager_names %}<a href="{% url 'create_coach' team.id %}" class="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">Add Manager</a>{% endif %}
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <p><span class="font-semibold text-slate-100">Coaches:</span> {% if coach_names %}<span class="text-slate-200">{{ coach_names|join:", " }}</span>{% else %}<span class="text-slate-400">None assigned</span>{% endif %}</p>
+                        <a href="{% url 'create_coach' team.id %}" class="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700">+ Coach</a>
+                    </div>
+                    <p><span class="font-semibold text-slate-100">Players:</span> <a href="#players" class="text-blue-300 hover:text-blue-200 underline">{{ player_count }}</a></p>
+                    <p><span class="font-semibold text-slate-100">Record:</span> {{ record.wins }}-{{ record.losses }}-{{ record.ties }}</p>
+                    <p><span class="font-semibold text-slate-100">Events:</span> {{ events|length }}</p>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-700 rounded-lg p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-lg font-semibold text-white">Coaching Staff</h3>
+                    <a href="{% url 'create_coach' team.id %}" class="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700">+ Coach</a>
+                </div>
                 {% if coaches %}
                     <ul class="space-y-3">
                         {% for c in coaches %}
                             <li class="bg-slate-800 border border-slate-700 rounded p-3">
                                 <div class="font-semibold text-slate-200">{{ c.user.get_full_name|default:c.user.username }}</div>
                                 <div class="text-slate-400 text-sm">Role: {{ c.membership.role }}</div>
-                                <div class="text-slate-400 text-sm mt-2">Players: {% if c.players %}{{ c.players|length }}{% else %}0{% endif %}</div>
+                                <div class="text-slate-400 text-sm mt-2">Guardian for {{ c.players|length }} player{% if c.players|length != 1 %}s{% endif %}</div>
                             </li>
                         {% endfor %}
                     </ul>
                 {% else %}
-                    <div class="text-slate-400">No coaches yet.</div>
-                    <a href="{% url 'create_coach' team.id %}" class="mt-3 inline-block bg-emerald-600 text-white px-3 py-2 rounded">Add Coach</a>
+                    <div class="text-slate-400">No coaching staff added yet.</div>
                 {% endif %}
             </div>
+        </div>
 
-            <div class="md:col-span-1 bg-slate-900 border border-slate-700 rounded-lg p-4">
-                <h3 class="text-lg font-semibold text-white mb-3">Players</h3>
-                {% if players %}
-                    <ul class="space-y-2">
-                        {% for p in players %}
-                            <li class="bg-slate-800 border border-slate-700 rounded p-2">
-                                <div class="text-slate-200 font-medium">{{ p.first_name }} {{ p.last_name }}</div>
-                                <div class="text-slate-400 text-sm">Guardian: {{ p.guardian.get_full_name|default:p.guardian.username }}</div>
-                            </li>
-                        {% endfor %}
-                    </ul>
-                {% else %}
-                    <div class="text-slate-400">No players yet.</div>
-                    <a href="{% url 'create_player' team.id %}" class="mt-3 inline-block bg-emerald-600 text-white px-3 py-2 rounded">Add Player</a>
-                {% endif %}
+        <div id="players" class="mb-6">
+            <div class="bg-slate-900 border border-slate-700 rounded-lg p-5">
+                <div class="flex items-center justify-between cursor-pointer" onclick="document.getElementById('players-list').classList.toggle('hidden'); document.getElementById('players-toggle').classList.toggle('rotate-180')">
+                    <h3 class="text-lg font-semibold text-white">Players</h3>
+                    <svg id="players-toggle" class="w-5 h-5 text-slate-300 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                    </svg>
+                </div>
+                <div id="players-list" class="hidden mt-4">
+                    {% if players %}
+                        <ul class="space-y-2">
+                            {% for p in players %}
+                                <li class="bg-slate-800 border border-slate-700 rounded p-3">
+                                    <div class="text-slate-200 font-medium">{{ p.first_name }} {{ p.last_name }}</div>
+                                    <div class="text-slate-400 text-sm">Guardian: {{ p.guardian.get_full_name|default:p.guardian.username }}</div>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="text-slate-400">No players yet.</div>
+                        <a href="{% url 'create_player' team.id %}" class="mt-3 inline-block bg-emerald-600 text-white px-3 py-2 rounded">Add Player</a>
+                    {% endif %}
+                </div>
             </div>
+        </div>
 
-            <div class="md:col-span-1 bg-slate-900 border border-slate-700 rounded-lg p-4">
-                <h3 class="text-lg font-semibold text-white mb-3">Calendar</h3>
-                {% if games %}
-                    <ul class="space-y-2">
-                        {% for g in games %}
-                            <li class="bg-slate-800 border border-slate-700 rounded p-2">
-                                <div class="text-slate-200 font-medium">{{ g.date_time|date:"M d, Y H:i" }} — {{ g.location }}</div>
-                                <div class="text-slate-400 text-sm">{% if g.home_team %}{{ g.home_team.name }}{% else %}TBD{% endif %} vs {% if g.away_team %}{{ g.away_team.name }}{% else %}TBD{% endif %}</div>
+        <div class="mb-6">
+            <div class="bg-slate-900 border border-slate-700 rounded-lg p-5">
+                <h3 class="text-lg font-semibold text-white mb-3">Upcoming & Completed Events</h3>
+                {% if events %}
+                    <ul class="space-y-3">
+                        {% for e in events %}
+                            <li class="bg-slate-800 border border-slate-700 rounded p-3">
+                                <div class="flex items-center justify-between gap-3 mb-2">
+                                    <div>
+                                        <div class="text-slate-200 font-semibold">
+                                            {% if e.title %}
+                                                {{ e.title }} - {{ e.date_time|date:"M d, Y H:i" }}
+                                            {% else %}
+                                                {{ e.date_time|date:"M d, Y H:i" }}
+                                            {% endif %}
+                                        </div>
+                                        <div class="text-slate-400 text-sm">
+                                            {% if e.location %}{{ e.location }}{% endif %}
+                                            {% if e.event_type %}<span class="ml-2 inline-block bg-slate-700 px-2 py-1 rounded text-xs">{{ e.get_event_type_display }}</span>{% endif %}
+                                        </div>
+                                    </div>
+                                    <span class="rounded-full px-3 py-1 text-xs font-semibold {% if e.is_completed %}bg-slate-700 text-emerald-300{% else %}bg-blue-700 text-slate-200{% endif %}">
+                                        {% if e.is_completed %}Completed{% else %}Scheduled{% endif %}
+                                    </span>
+                                </div>
+                                <div class="text-slate-300 text-sm mb-2">
+                                    {% if e.home_team %}
+                                        {% if e.home_team == team %}
+                                            {% if e.away_team %}Opponent: {{ e.away_team.name }} (Home){% elif e.opponent_team %}Opponent: {{ e.opponent_team.name }} (Home){% endif %}
+                                        {% else %}
+                                            {% if e.home_team %}Opponent: {{ e.home_team.name }} (Away){% endif %}
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                                {% if e.is_completed %}
+                                    {% if e.home_score is not None %}
+                                        <div class="text-slate-200 font-medium">Final Score: {{ e.home_score }} - {{ e.away_score }}</div>
+                                    {% else %}
+                                        <div class="text-slate-400 text-sm">Event completed.</div>
+                                    {% endif %}
+                                {% else %}
+                                    <div class="text-slate-400 text-sm">
+                                        {% if e.home_score is not None %}Score entered: {{ e.home_score }} - {{ e.away_score }}{% else %}No score entered yet.{% endif %}
+                                    </div>
+                                {% endif %}
                             </li>
                         {% endfor %}
                     </ul>
                 {% else %}
-                    <div class="text-slate-400">No scheduled games.</div>
-                    <a href="{% url 'create_game' team.id %}" class="mt-3 inline-block bg-emerald-600 text-white px-3 py-2 rounded">Schedule Game</a>
+                    <div class="text-slate-400">No team events have been scheduled yet.</div>
+                    <a href="{{ events_url }}" class="mt-3 inline-block bg-emerald-600 text-white px-3 py-2 rounded">Create Event</a>
                 {% endif %}
             </div>
         </div>

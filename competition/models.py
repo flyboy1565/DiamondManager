@@ -1,6 +1,91 @@
 import uuid
 from django.db import models
+from django.contrib.auth.models import User
 from leagues.models import Team, Season
+
+
+class TeamEvent(models.Model):
+    """
+    Unified event model for team activities: games, practices, tournaments, scrimmages, hangouts, ceremonies.
+    """
+    EVENT_TYPE_CHOICES = [
+        ('OPENING_DAY', 'Opening Day'),
+        ('CLOSING_CEREMONY', 'Closing Ceremony'),
+        ('GAME', 'Game'),
+        ('PRACTICE', 'Practice'),
+        ('TOURNAMENT', 'Tournament'),
+        ('SCRIMMAGE', 'Scrimmage'),
+        ('HANGOUT', 'Hangout'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('SCHEDULED', 'Scheduled'),
+        ('CANCELLED', 'Cancelled'),
+        ('COMPLETED', 'Completed'),
+    ]
+    
+    PRACTICE_FOCUS_CHOICES = [
+        ('pitching', 'Pitching'),
+        ('hitting', 'Hitting'),
+        ('fielding', 'Fielding'),
+        ('conditioning', 'Conditioning'),
+        ('base_running', 'Base Running'),
+        ('general', 'General Practice'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='team_events')
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPE_CHOICES)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    date_time = models.DateTimeField()
+    location = models.CharField(max_length=255, blank=True)
+    
+    # Creator tracking
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='team_events_created')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # Event status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='SCHEDULED')
+    
+    # Game-specific fields
+    opponent_team = models.ForeignKey(Team, on_delete=models.SET_NULL, null=True, blank=True, related_name='opponent_events')
+    home_score = models.PositiveIntegerField(null=True, blank=True)
+    away_score = models.PositiveIntegerField(null=True, blank=True)
+    is_home_game = models.BooleanField(null=True, blank=True)
+    
+    # Game state fields (live scoring)
+    is_live = models.BooleanField(default=False)
+    current_inning = models.PositiveIntegerField(default=1, null=True, blank=True)
+    is_top_inning = models.BooleanField(default=True, null=True, blank=True)
+    outs = models.PositiveIntegerField(default=0, null=True, blank=True)
+    balls = models.PositiveIntegerField(default=0, null=True, blank=True)
+    strikes = models.PositiveIntegerField(default=0, null=True, blank=True)
+    pitch_count = models.PositiveIntegerField(default=0, null=True, blank=True)
+    
+    # Practice-specific fields
+    practice_focus = models.CharField(max_length=50, choices=PRACTICE_FOCUS_CHOICES, null=True, blank=True)
+    attendance_required = models.BooleanField(default=False)
+    
+    # Tournament-specific fields
+    tournament_name = models.CharField(max_length=255, null=True, blank=True)
+    tournament_division = models.CharField(max_length=255, null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-date_time']
+        indexes = [
+            models.Index(fields=['team', 'date_time']),
+            models.Index(fields=['event_type', 'status']),
+        ]
+    
+    def __str__(self):
+        return f"{self.team.name} - {self.get_event_type_display()} - {self.date_time.strftime('%m/%d/%Y')}"
+    
+    @property
+    def is_completed(self):
+        return self.status == 'COMPLETED'
+
 
 class Game(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

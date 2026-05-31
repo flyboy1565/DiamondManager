@@ -1,0 +1,156 @@
+{% extends 'profiles/base.html' %}
+
+{% block title %}Create Event - {{ team.name }}{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-2xl mx-auto px-4 py-8">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 md:p-8 shadow-xl">
+        <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">Create New Event</h1>
+        <p class="text-slate-400 mb-8">{{ team.name }}</p>
+
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="{{ form.event_type.id_for_label }}" class="block text-slate-300 font-semibold mb-3">Event Type *</label>
+                    {{ form.event_type }}
+                    {% if form.event_type.errors %}<div class="text-red-400 text-sm mt-2">{{ form.event_type.errors }}</div>{% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.title.id_for_label }}" class="block text-slate-300 font-semibold mb-3">Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="text-red-400 text-sm mt-2">{{ form.title.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div>
+                <label for="{{ form.description.id_for_label }}" class="block text-slate-300 font-semibold mb-3">Description</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="text-red-400 text-sm mt-2">{{ form.description.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="{{ form.date_time.id_for_label }}" class="block text-slate-300 font-semibold mb-3">Date & Time *</label>
+                    {{ form.date_time }}
+                    {% if form.date_time.errors %}<div class="text-red-400 text-sm mt-2">{{ form.date_time.errors }}</div>{% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.location.id_for_label }}" class="block text-slate-300 font-semibold mb-3">Location</label>
+                    {{ form.location }}
+                    {% if form.location.errors %}<div class="text-red-400 text-sm mt-2">{{ form.location.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <!-- Game/Scrimmage Fields -->
+            <div id="game-fields" class="space-y-6 hidden">
+                <div class="border-t border-slate-700 pt-6">
+                    <h3 class="text-slate-300 font-semibold mb-4">Game Details</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="{{ form.opponent_team.id_for_label }}" class="block text-slate-300 font-semibold mb-3">Opponent Team</label>
+                            {{ form.opponent_team }}
+                        </div>
+                        <div class="flex items-end">
+                            <label class="flex items-center gap-3 text-slate-300 cursor-pointer">
+                                <input type="checkbox" name="is_home_game" class="w-5 h-5 rounded accent-emerald-600">
+                                <span class="font-semibold">Home Game</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Practice Fields -->
+            <div id="practice-fields" class="space-y-6 hidden">
+                <div class="border-t border-slate-700 pt-6">
+                    <h3 class="text-slate-300 font-semibold mb-4">Practice Details</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="{{ form.practice_focus.id_for_label }}" class="block text-slate-300 font-semibold mb-3">Focus Area</label>
+                            {{ form.practice_focus }}
+                        </div>
+                        <div class="flex items-end">
+                            <label class="flex items-center gap-3 text-slate-300 cursor-pointer">
+                                <input type="checkbox" name="attendance_required" class="w-5 h-5 rounded accent-emerald-600">
+                                <span class="font-semibold">Attendance Required</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tournament Fields -->
+            <div id="tournament-fields" class="space-y-6 hidden">
+                <div class="border-t border-slate-700 pt-6">
+                    <h3 class="text-slate-300 font-semibold mb-4">Tournament Details</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="{{ form.tournament_name.id_for_label }}" class="block text-slate-300 font-semibold mb-3">Tournament Name</label>
+                            {{ form.tournament_name }}
+                        </div>
+                        <div>
+                            <label for="{{ form.tournament_division.id_for_label }}" class="block text-slate-300 font-semibold mb-3">Division</label>
+                            {{ form.tournament_division }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-slate-700 pt-6">
+                <label for="{{ form.status.id_for_label }}" class="block text-slate-300 font-semibold mb-3">Status</label>
+                {{ form.status }}
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3 pt-6">
+                <button type="submit" class="bg-emerald-600 text-white font-semibold px-6 py-3 rounded-lg hover:bg-emerald-700 transition w-full sm:w-auto">Create Event</button>
+                <a href="{% url 'team_events' team.id %}" class="bg-slate-700 text-white font-semibold px-6 py-3 rounded-lg hover:bg-slate-600 transition text-center w-full sm:w-auto">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    input[type="text"],
+    input[type="datetime-local"],
+    input[type="number"],
+    textarea,
+    select {
+        @apply w-full bg-slate-900 border border-slate-600 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 focus:ring-opacity-20 transition placeholder-slate-500;
+    }
+    
+    textarea {
+        @apply resize-none;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const eventTypeField = document.getElementById('{{ form.event_type.id_for_label }}');
+    const gameFields = document.getElementById('game-fields');
+    const practiceFields = document.getElementById('practice-fields');
+    const tournamentFields = document.getElementById('tournament-fields');
+
+    function toggleFields() {
+        const eventType = eventTypeField.value;
+        gameFields.classList.add('hidden');
+        practiceFields.classList.add('hidden');
+        tournamentFields.classList.add('hidden');
+
+        if (['GAME', 'SCRIMMAGE'].includes(eventType)) {
+            gameFields.classList.remove('hidden');
+        } else if (eventType === 'PRACTICE') {
+            practiceFields.classList.remove('hidden');
+        } else if (eventType === 'TOURNAMENT') {
+            tournamentFields.classList.remove('hidden');
+        }
+    }
+
+    eventTypeField.addEventListener('change', toggleFields);
+    toggleFields(); // Initialize on page load
+});
+</script>
+{% endblock %}

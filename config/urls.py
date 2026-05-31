@@ -8,4 +8,5 @@ urlpatterns = [
     path("api/", api.urls), # This wires up all your endpoints
     path('', RedirectView.as_view(pattern_name='landing_portal', permanent=False)),
     path('profiles/', include('profiles.urls')), # Include the profiles app URLs
+    path('competitions/', include('competition.urls')),  # Include competition event URLs
 ]

@@ -1,0 +1,88 @@
+{% extends 'profiles/base.html' %}
+
+{% block title %}Team Events - {{ team.name }}{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-6xl">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-xl">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ team.name }} - Events</h1>
+                <p class="text-slate-400">Manage practices, games, tournaments, and team activities</p>
+            </div>
+            <a href="{% url 'create_event' team.id %}" class="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700">+ New Event</a>
+        </div>
+
+        <!-- Filters -->
+        <div class="mb-6 flex gap-4 flex-wrap">
+            <form method="get" class="flex gap-2">
+                <select name="status" class="bg-slate-700 text-white px-3 py-2 rounded">
+                    <option value="">All Status</option>
+                    <option value="SCHEDULED" {% if request.GET.status == 'SCHEDULED' %}selected{% endif %}>Scheduled</option>
+                    <option value="COMPLETED" {% if request.GET.status == 'COMPLETED' %}selected{% endif %}>Completed</option>
+                    <option value="CANCELLED" {% if request.GET.status == 'CANCELLED' %}selected{% endif %}>Cancelled</option>
+                </select>
+                <select name="type" class="bg-slate-700 text-white px-3 py-2 rounded">
+                    <option value="">All Types</option>
+                    {% for type_val, type_label in event_types %}
+                        <option value="{{ type_val }}" {% if request.GET.type == type_val %}selected{% endif %}>{{ type_label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Filter</button>
+                <a href="?" class="bg-slate-700 text-white px-4 py-2 rounded hover:bg-slate-600">Clear</a>
+            </form>
+        </div>
+
+        <!-- Events List -->
+        {% if events %}
+            <div class="space-y-3">
+                {% for event in events %}
+                    <div class="bg-slate-900 border border-slate-700 rounded-lg p-4 hover:border-slate-600 transition">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-semibold text-white">{{ event.title }}</h3>
+                                <div class="mt-2 space-y-1 text-slate-300 text-sm">
+                                    <p><span class="text-slate-400">Date:</span> {{ event.date_time|date:"M d, Y H:i" }}</p>
+                                    <p><span class="text-slate-400">Type:</span> <span class="inline-block bg-slate-800 px-2 py-1 rounded">{{ event.get_event_type_display }}</span></p>
+                                    {% if event.location %}<p><span class="text-slate-400">Location:</span> {{ event.location }}</p>{% endif %}
+                                    {% if event.opponent_team %}<p><span class="text-slate-400">Opponent:</span> {{ event.opponent_team.name }}</p>{% endif %}
+                                    {% if event.practice_focus %}<p><span class="text-slate-400">Focus:</span> {{ event.get_practice_focus_display }}</p>{% endif %}
+                                </div>
+                            </div>
+                            <div class="flex flex-col gap-2">
+                                <span class="rounded-full px-3 py-1 text-xs font-semibold text-center {% if event.status == 'SCHEDULED' %}bg-blue-700 text-slate-200{% elif event.status == 'COMPLETED' %}bg-emerald-700 text-emerald-200{% else %}bg-red-700 text-red-200{% endif %}">
+                                    {{ event.get_status_display }}
+                                </span>
+                                <a href="{% url 'event_detail' event.id %}" class="text-blue-400 hover:text-blue-300 text-sm">View Details</a>
+                                {% if user.profile.role in 'ADMIN|ORG_OWNER|ORG_ADMIN' or event.created_by == user %}
+                                    <a href="{% url 'edit_event' event.id %}" class="text-yellow-400 hover:text-yellow-300 text-sm">Edit</a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Pagination -->
+            {% if is_paginated %}
+                <div class="mt-6 flex justify-center gap-2">
+                    {% if page_obj.has_previous %}
+                        <a href="?page=1" class="bg-slate-700 text-white px-3 py-2 rounded">First</a>
+                        <a href="?page={{ page_obj.previous_page_number }}" class="bg-slate-700 text-white px-3 py-2 rounded">Previous</a>
+                    {% endif %}
+                    <span class="bg-slate-800 text-white px-3 py-2 rounded">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}" class="bg-slate-700 text-white px-3 py-2 rounded">Next</a>
+                        <a href="?page={{ page_obj.paginator.num_pages }}" class="bg-slate-700 text-white px-3 py-2 rounded">Last</a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="text-center py-12">
+                <p class="text-slate-400 text-lg mb-4">No events found</p>
+                <a href="{% url 'create_event' team.id %}" class="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700">Create First Event</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

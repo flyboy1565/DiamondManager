@@ -322,15 +322,43 @@ class TeamDetailView(LoginRequiredMixin, FormView):
 
         # Players on team
         players = PlayerMembership.objects.filter(team=team, is_active=True).select_related('player')
+        player_count = players.count()
 
-        # Calendar: upcoming games for team
+        manager_names = []
+        assistant_names = []
+        for m in memberships:
+            full_name = m.user.get_full_name() or m.user.username
+            if m.role == 'MANAGER':
+                manager_names.append(full_name)
+            elif m.role == 'COACH':
+                assistant_names.append(full_name)
+
+        home_completed = team.competition_home_games.filter(is_completed=True)
+        away_completed = team.competition_away_games.filter(is_completed=True)
+        wins = home_completed.filter(home_score__gt=F('away_score')).count() + away_completed.filter(away_score__gt=F('home_score')).count()
+        losses = home_completed.filter(home_score__lt=F('away_score')).count() + away_completed.filter(away_score__lt=F('home_score')).count()
+        ties = home_completed.filter(home_score=F('away_score')).count() + away_completed.filter(away_score=F('home_score')).count()
+
+        # Fetch events: both legacy Games and new TeamEvents
+        from competition.models import TeamEvent
         games_qs = team.competition_home_games.all() | team.competition_away_games.all()
-        games = games_qs.order_by('date_time')[:20]
+        team_events = TeamEvent.objects.filter(team=team, event_type__in=['GAME', 'SCRIMMAGE'])
+        
+        # Combine and sort by date
+        from itertools import chain
+        all_events = list(chain(games_qs, team_events))
+        all_events.sort(key=lambda x: x.date_time)
+        events = all_events[:20]
 
         context['team'] = team
         context['coaches'] = coaches
         context['players'] = [pm.player for pm in players]
-        context['games'] = games
+        context['player_count'] = player_count
+        context['manager_names'] = manager_names
+        context['coach_names'] = assistant_names
+        context['record'] = {'wins': wins, 'losses': losses, 'ties': ties}
+        context['events'] = events
+        context['events_url'] = f'/competitions/team/{team.id}/events/'
         return context
 
 
