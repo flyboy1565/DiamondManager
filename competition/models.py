@@ -1,21 +1,47 @@
 import uuid
 from django.db import models
 from django.contrib.auth.models import User
-from leagues.models import Team, Season
+from leagues.models import Team, Season, Organization, Division
 
 
 class TeamEvent(models.Model):
     """
-    Unified event model for team activities: games, practices, tournaments, scrimmages, hangouts, ceremonies.
+    Unified event model for team/division/organization activities.
+    Supports events at multiple levels: organization, division, or team.
     """
+    SCOPE_CHOICES = [
+        ('ORGANIZATION', 'Organization/League'),
+        ('DIVISION', 'Division'),
+        ('TEAM', 'Team'),
+    ]
+    
     EVENT_TYPE_CHOICES = [
-        ('OPENING_DAY', 'Opening Day'),
-        ('CLOSING_CEREMONY', 'Closing Ceremony'),
-        ('GAME', 'Game'),
-        ('PRACTICE', 'Practice'),
-        ('TOURNAMENT', 'Tournament'),
-        ('SCRIMMAGE', 'Scrimmage'),
-        ('HANGOUT', 'Hangout'),
+        # Organization/League level events
+        ('LEAGUE_OPENING_DAY', 'League Opening Day'),
+        ('LEAGUE_CLOSING_CEREMONY', 'League Closing Ceremony'),
+        ('LEAGUE_TOURNAMENT', 'League Tournament'),
+        ('LEAGUE_ALLSTAR_GAME', 'League All-Star Game'),
+        ('LEAGUE_AWARDS', 'League Awards Ceremony'),
+        ('LEAGUE_PLAYOFF', 'League Playoff'),
+        ('LEAGUE_ANNOUNCEMENT', 'League Announcement'),
+        
+        # Division level events
+        ('DIVISION_OPENING_DAY', 'Division Opening Day'),
+        ('DIVISION_CLOSING_CEREMONY', 'Division Closing Ceremony'),
+        ('DIVISION_CHAMPIONSHIP', 'Division Championship'),
+        ('DIVISION_TOURNAMENT', 'Division Tournament'),
+        ('DIVISION_CLINIC', 'Division Practice Clinic'),
+        ('DIVISION_AWARDS', 'Division Awards Night'),
+        ('DIVISION_ALLSTAR', 'Division All-Star Selection'),
+        
+        # Team level events
+        ('TEAM_PRACTICE', 'Practice'),
+        ('TEAM_GAME', 'Game'),
+        ('TEAM_SCRIMMAGE', 'Scrimmage'),
+        ('TEAM_HOME_OPENER', 'Home Opener'),
+        ('TEAM_TOURNAMENT', 'Tournament'),
+        ('TEAM_HANGOUT', 'Hangout/Social Event'),
+        ('TEAM_PARTY', 'Team Party/Celebration'),
     ]
     
     STATUS_CHOICES = [
@@ -34,8 +60,15 @@ class TeamEvent(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='team_events')
-    event_type = models.CharField(max_length=20, choices=EVENT_TYPE_CHOICES)
+    
+    # Scope hierarchy
+    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, default='TEAM')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, null=True, blank=True, related_name='events')
+    division = models.ForeignKey(Division, on_delete=models.CASCADE, null=True, blank=True, related_name='events')
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True, related_name='team_events')
+    
+    # Event details
+    event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     date_time = models.DateTimeField()
@@ -75,16 +108,74 @@ class TeamEvent(models.Model):
     class Meta:
         ordering = ['-date_time']
         indexes = [
-            models.Index(fields=['team', 'date_time']),
+            models.Index(fields=['scope', 'organization']),
+            models.Index(fields=['scope', 'division']),
+            models.Index(fields=['scope', 'team']),
             models.Index(fields=['event_type', 'status']),
+            models.Index(fields=['date_time']),
         ]
     
     def __str__(self):
-        return f"{self.team.name} - {self.get_event_type_display()} - {self.date_time.strftime('%m/%d/%Y')}"
+        scope_name = dict(self.SCOPE_CHOICES).get(self.scope, 'Unknown')
+        target = self.organization or self.division or self.team
+        return f"{target} - {self.get_event_type_display()} - {self.date_time.strftime('%m/%d/%Y')}"
     
     @property
     def is_completed(self):
         return self.status == 'COMPLETED'
+    
+    def propagate_to_teams(self):
+        """
+        Propagate organization and division events down to every team under them.
+        """
+        if self.scope == 'DIVISION' and self.division:
+            teams = self.division.teams.all()
+        elif self.scope == 'ORGANIZATION' and self.organization:
+            teams = Team.objects.filter(division__season__organization=self.organization)
+        else:
+            return
+
+        for team in teams:
+            TeamEvent.objects.create(
+                scope='TEAM',
+                organization=team.division.season.organization,
+                division=team.division,
+                team=team,
+                event_type=self.event_type,
+                title=self.title,
+                description=self.description,
+                date_time=self.date_time,
+                location=self.location,
+                created_by=self.created_by,
+                status=self.status,
+                opponent_team=self.opponent_team,
+                home_score=self.home_score,
+                away_score=self.away_score,
+                is_home_game=self.is_home_game,
+                is_live=self.is_live,
+                current_inning=self.current_inning,
+                is_top_inning=self.is_top_inning,
+                outs=self.outs,
+                balls=self.balls,
+                strikes=self.strikes,
+                pitch_count=self.pitch_count,
+                practice_focus=self.practice_focus,
+                attendance_required=self.attendance_required,
+                tournament_name=self.tournament_name,
+                tournament_division=self.tournament_division,
+            )
+
+    def clean(self):
+        """Validate scope hierarchy."""
+        from django.core.exceptions import ValidationError
+        
+        if self.scope == 'ORGANIZATION' and not self.organization:
+            raise ValidationError("Organization-level events require an organization.")
+        if self.scope == 'DIVISION' and not self.division:
+            raise ValidationError("Division-level events require a division.")
+        if self.scope == 'TEAM' and not self.team:
+            raise ValidationError("Team-level events require a team.")
+
 
 
 class Game(models.Model):
@@ -108,6 +199,7 @@ class Game(models.Model):
     strikes = models.PositiveIntegerField(default=0)
     pitch_count = models.PositiveIntegerField(default=0)
     is_completed = models.BooleanField(default=False)
+    scoring_data = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f"{self.home_team} vs {self.away_team} - {self.date_time.strftime('%m/%d')}"
@@ -126,6 +218,18 @@ class GameLineupEntry(models.Model):
 
     def __str__(self):
         return f"{self.game} - {self.player} ({self.batting_order})"
+
+class ScoringToken(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='scoring_tokens')
+    token = models.CharField(max_length=64, unique=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    expires_at = models.DateTimeField()
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"Token for {self.game} (active: {self.is_active})"
+
 
 class PlayerGameStat(models.Model):
     player = models.ForeignKey('profiles.Player', on_delete=models.CASCADE)

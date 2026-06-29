@@ -54,20 +54,20 @@ def get_my_teams(request, active_only: bool = False):
     query = TeamMembership.objects.filter(user=request.user)
     if active_only:
         query = query.filter(is_active=True)
-    return query.select_related('team', 'team__season', 'team__season__organization')
+    return query.select_related('team', 'team__division__season__organization')
 
 @router.get("/my-memberships", response=List[schemas.TeamMembershipSchema])
 def get_my_memberships(request):
     # This grabs the user's teams, including the Org and Season names
     return TeamMembership.objects.filter(user=request.user).select_related(
-        'team__season__organization'
+        'team__division__season__organization'
     ).order_by('-is_active', '-joined_at')
 
 @router.get("/my-kids", response=List[schemas.PlayerSchema])
 def get_my_kids(request):
     # Grabs all players where the logged-in user is the guardian
     return Player.objects.filter(guardian=request.user).prefetch_related(
-        'team_history__team__season__organization'
+        'team_history__team__division__season__organization'
     )    
 
 
@@ -92,7 +92,7 @@ def create_player(request, data: schemas.PlayerCreateSchema):
     return 201, player
 
 @router.put("/players/{player_id}", response=schemas.PlayerSchema)
-def update_player(request, player_id: UUID, data: schemas.PlayerUpdateSchema):
+def update_player(request, player_id: int, data: schemas.PlayerUpdateSchema):
     player = get_object_or_404(Player, id=player_id)
     for attr, value in data.dict(exclude_unset=True).items():
         setattr(player, attr, value)
@@ -100,7 +100,7 @@ def update_player(request, player_id: UUID, data: schemas.PlayerUpdateSchema):
     return player
 
 @router.delete("/players/{player_id}")
-def delete_player(request, player_id: UUID):
+def delete_player(request, player_id: int):
     get_object_or_404(Player, id=player_id).delete()
     return {"success": True}
 
@@ -153,6 +153,21 @@ def verify_invitation(request, token: str):
         "user_exists": user_exists
     }
 
+def _assign_profile_organization_from_team(user, team):
+    if not team:
+        return
+
+    season = getattr(team, 'season', None)
+    organization = getattr(season, 'organization', None)
+    if not organization:
+        return
+
+    profile = user.profile
+    if profile.organization is None:
+        profile.organization = organization
+        profile.save()
+
+
 # 3. ATOMIC ACCEPTANCE & GRAPH ACCOUNT BUILDING
 @router.post("/invitations/accept", auth=None, response={201: dict, 200: dict, 400: dict})
 def accept_invitation(request, data: schemas.InvitationAcceptSchema):
@@ -176,6 +191,7 @@ def accept_invitation(request, data: schemas.InvitationAcceptSchema):
                     user=existing_user, team=invitation.team, role=invitation.target_role,
                     defaults={'is_active': True}
                 )
+                _assign_profile_organization_from_team(existing_user, invitation.team)
                 
             invitation.is_accepted = True
             invitation.save()
@@ -207,6 +223,7 @@ def accept_invitation(request, data: schemas.InvitationAcceptSchema):
                 TeamMembership.objects.create(
                     user=new_user, team=invitation.team, role=invitation.target_role, is_active=True
                 )
+                _assign_profile_organization_from_team(new_user, invitation.team)
                 
             invitation.is_accepted = True
             invitation.save()

@@ -106,9 +106,29 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         profile = self.request.user.profile
         
-        # Get the user's organization
+        # Get the user's organization; if missing, infer from team memberships.
         organization = profile.organization
+        if not organization:
+            team_membership = self.request.user.memberships.filter(is_active=True).select_related('team__division__season__organization').order_by('-joined_at').first()
+            if team_membership:
+                organization = getattr(team_membership.team.season, 'organization', None)
+
+        if profile.role == 'ORG_OWNER':
+            role_label = 'Organization Owner'
+        elif profile.role == 'ORG_ADMIN':
+            role_label = 'Organization Admin'
+        elif profile.role == 'COACH':
+            role_label = 'Team Coach'
+        elif profile.role == 'MANAGER':
+            role_label = 'Team Manager'
+        else:
+            role_label = dict(Profile.ROLE_CHOICES).get(profile.role, profile.role)
+
+        coaching_teams = [membership.team for membership in self.request.user.memberships.filter(role='COACH', is_active=True).select_related('team')]
+
         context['organization'] = organization
+        context['role_label'] = role_label
+        context['coaching_teams'] = coaching_teams
 
         if organization:
             # Toggle to include inactive seasons
@@ -527,7 +547,15 @@ class RosterOnboardingView(LoginRequiredMixin, FormView):
         
         invite_url = self.request.build_absolute_uri(f"/api/profiles/invitations/verify/{invitation.token}")
         
-        # Print block acting as local fallback stream out to your console logs
+        send_mail(
+            subject="DiamondManager Coach Invitation",
+            message=f"Hello {first_name},\n\nYou've been added as a coach for {team.name} on "
+                    f"DiamondManager. Click the link below to accept your invitation:\n\n{invite_url}",
+            from_email=None,
+            recipient_list=[email],
+            fail_silently=False,
+        )
+        
         print("\n" + "="*60)
         print(f"COACH ONBOARDING INVITATION DEEP-LINK GENERATED")
         print(f"To: {email} ({first_name} {last_name})")

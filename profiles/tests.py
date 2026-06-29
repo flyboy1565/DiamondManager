@@ -1,3 +1,4 @@
+import json
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -24,26 +25,39 @@ class InvitationTDDTestCase(TestCase):
 
         # 3. Create Mock Team and Player structures safely using the ORM
         # We look up models dynamically to avoid strict compile-time import blocks
+        Organization = apps.get_model('leagues', 'Organization')
         Team = apps.get_model('leagues', 'Team')
+        Division = apps.get_model('leagues', 'Division')
         Player = apps.get_model('profiles', 'Player')
         Invitation = apps.get_model('profiles', 'Invitation')
         Season = apps.get_model('leagues', 'Season')
 
-        self.mock_season = Season.objects.create(organization_id=uuid.uuid4(), season="Spring", year=2026)
-        self.mock_team = Team.objects.create(name="12U Bombers", access_code="BOMBERS2026", season=self.mock_season.id,)
+        self.mock_org = Organization.objects.create(name="Test Org")
+        self.mock_season = Season.objects.create(organization=self.mock_org, season="Spring", year=2026)
+        self.mock_division = Division.objects.create(season=self.mock_season, name="Test Division")
+        self.mock_team = Team.objects.create(name="12U Bombers", access_code="BOMBERS2026", division=self.mock_division)
         self.mock_player = Player.objects.create(first_name="Jonah", last_name="Holstine", guardian=self.coach_user)
+
+    def _get_jwt_token(self, user):
+        resp = self.client.post("/api/token/pair", json.dumps({
+            "username": user.username, "password": "password123"
+        }), content_type="application/json")
+        return resp.json()["access"]
+
+    def _auth_header(self, token):
+        return {"HTTP_AUTHORIZATION": f"Bearer {token}"}
 
     def test_01_coach_can_create_invitation(self):
         """TDD: Verify authorized personnel can issue an invite payload."""
-        # Force authentication context for Ninja router by mocking request.auth
-        self.client.force_login(self.coach_user)
+        token = self._get_jwt_token(self.coach_user)
+        headers = self._auth_header(token)
         payload = {
             "email": "new_parent@example.com",
             "team_id": str(self.mock_team.id),
             "player_id": self.mock_player.id,
             "target_role": "PARENT"
         }
-        response = self.client.post("/api/profiles/invitations", payload, content_type="application/json")
+        response = self.client.post("/api/profiles/invitations", payload, content_type="application/json", **headers)
         self.assertEqual(response.status_code, 201)
         self.assertIn("token", response.json())
 
@@ -110,12 +124,44 @@ class InvitationTDDTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(TeamMembership.objects.filter(user=self.parent_user, team=self.mock_team).exists())
 
-    def test_06_join_team_via_public_fan_code(self):
+    def test_06_accept_invitation_assigns_organization_from_team(self):
+        """TDD: Ensure invited users receive the organization link from their team assignment."""
+        Organization = apps.get_model('leagues', 'Organization')
+        Season = apps.get_model('leagues', 'Season')
+        Division = apps.get_model('leagues', 'Division')
+        Team = apps.get_model('leagues', 'Team')
+        Invitation = apps.get_model('profiles', 'Invitation')
+
+        organization = Organization.objects.create(name="Cactus Wren LL")
+        season = Season.objects.create(organization=organization, season="Spring", year=2026)
+        division = Division.objects.create(season=season, name="Test")
+        team = Team.objects.create(name="12U Bombers", access_code="BOMBERS2027", division=division)
+
+        invite = Invitation.objects.create(
+            email="returning@fan.com", team=team,
+            target_role="COACH", invited_by=self.coach_user
+        )
+
+        payload = {
+            "token": invite.token,
+            "username": "",
+            "password": "",
+            "first_name": "",
+            "last_name": ""
+        }
+        response = self.client.post("/api/profiles/invitations/accept", payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 200)
+        self.parent_user.refresh_from_db()
+        self.assertEqual(self.parent_user.profile.organization, organization)
+
+    def test_07_join_team_via_public_fan_code(self):
         """TDD: Fans can register to follow teams universally using alphanumeric codes."""
-        self.client.force_login(self.parent_user)
+        token = self._get_jwt_token(self.parent_user)
+        headers = self._auth_header(token)
         payload = {"access_code": "BOMBERS2026"}
         
-        response = self.client.post("/api/profiles/teams/join-as-follower", payload, content_type="application/json")
+        response = self.client.post("/api/profiles/teams/join-as-follower", payload, content_type="application/json", **headers)
         self.assertEqual(response.status_code, 200)
         
         TeamMembership = apps.get_model('profiles', 'TeamMembership')
@@ -137,11 +183,37 @@ class AdminWebviewInterfaceTestCase(TestCase):
         Organization = apps.get_model('leagues', 'Organization')
         
         self.org = Organization.objects.create(name="Cactus Wren LL")
-        self.season = Season.objects.create(name="Spring 2026", organization=self.org)
+        self.season = Season.objects.create(organization=self.org, season="Spring", year=2026)
+
+    def test_dashboard_infers_organization_for_coach_membership(self):
+        """Admins who also coach teams should see the organization context on the dashboard."""
+        Organization = apps.get_model('leagues', 'Organization')
+        Season = apps.get_model('leagues', 'Season')
+        Division = apps.get_model('leagues', 'Division')
+        Team = apps.get_model('leagues', 'Team')
+        TeamMembership = apps.get_model('profiles', 'TeamMembership')
+
+        organization = Organization.objects.create(name="Carter County LL")
+        season = Season.objects.create(organization=organization, season="Fall", year=2026)
+        division = Division.objects.create(season=season, name="10U")
+        team = Team.objects.create(name="10U Tigers", access_code="TIGERS2026", division=division)
+
+        coach_user = User.objects.create_user(username="coach_sam", password="password123")
+        coach_user.profile.role = "COACH"
+        coach_user.profile.save()
+        TeamMembership.objects.create(user=coach_user, team=team, role="COACH", is_active=True)
+
+        self.client.force_login(coach_user)
+        response = self.client.get(reverse('dashboard'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Carter County LL")
+        self.assertContains(response, "10U Tigers")
 
     def test_manual_coach_entry_sends_console_email(self):
         """Verify that typing a single coach manually generates an invite and drops mail into the system."""
         payload = {
+            'division_name': '10U',
             'team_name': '11U Mud Hens',
             'manual_email': 'assistant_coach@gmail.com',
             'manual_first_name': 'John',
@@ -164,6 +236,7 @@ class AdminWebviewInterfaceTestCase(TestCase):
         uploaded_file = SimpleUploadedFile("roster.csv", csv_content.encode('utf-8'), content_type="text/csv")
         
         payload = {
+            'division_name': '10U',
             'team_name': '9U Raptors',
             'spreadsheet_file': uploaded_file
         }

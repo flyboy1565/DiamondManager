@@ -54,6 +54,16 @@ class GameLiveUpdateSchema(Schema):
     is_live: Optional[bool] = True
     is_completed: Optional[bool] = False    
 
+class SetBatterSchema(Schema):
+    side: str  # "home" or "away"
+    player_id: Optional[int] = None
+    skip: bool = False
+
+
+class RecordPitchSchema(Schema):
+    type: str  # "ball", "strike", "foul", "hit"
+
+
 class GameCreateSchema(Schema):
     season_id: UUID
     home_team_id: UUID

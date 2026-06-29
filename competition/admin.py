@@ -1,15 +1,17 @@
 from django.contrib import admin
-from .models import Game, PlayerGameStat, TeamEvent
+from .models import Game, PlayerGameStat, TeamEvent, ScoringToken
 
-models_to_register = [Game, PlayerGameStat, TeamEvent]
 
-for model in models_to_register:
-    # Create a dynamic subclass of ModelAdmin for each model
-    admin_class = type(
-        f"{model.__name__}Admin", 
-        (admin.ModelAdmin,), 
-        {
-            "list_display": [field.name for field in model._meta.fields]
-        }
-    )
-    admin.site.register(model, admin_class)
+class GameAdmin(admin.ModelAdmin):
+    list_display = ['id', 'home_team', 'away_team', 'date_time', 'is_live', 'is_completed',
+                    'home_score', 'away_score', 'current_inning', 'outs', 'balls', 'strikes']
+
+
+class ScoringTokenAdmin(admin.ModelAdmin):
+    list_display = ['id', 'game', 'token', 'created_by', 'expires_at', 'is_active']
+
+
+admin.site.register(Game, GameAdmin)
+admin.site.register(PlayerGameStat)
+admin.site.register(TeamEvent)
+admin.site.register(ScoringToken, ScoringTokenAdmin)

@@ -1,43 +1,67 @@
 """
-Permission logic for team events based on role and event type.
+Permission logic for team events based on role, event type, and scope.
 """
 
+# Event types allowed by role and scope
 EVENT_PERMISSIONS = {
-    'OPENING_DAY': ['ADMIN', 'ORG_OWNER', 'ORG_ADMIN'],
-    'CLOSING_CEREMONY': ['ADMIN', 'ORG_OWNER', 'ORG_ADMIN'],
-    'GAME': ['ADMIN', 'ORG_OWNER', 'ORG_ADMIN'],
-    'TOURNAMENT': ['ADMIN', 'ORG_OWNER', 'ORG_ADMIN'],
-    'PRACTICE': ['MANAGER', 'COACH', 'ADMIN', 'ORG_OWNER', 'ORG_ADMIN'],
-    'SCRIMMAGE': ['MANAGER', 'COACH', 'ADMIN', 'ORG_OWNER', 'ORG_ADMIN'],
-    'HANGOUT': ['MANAGER', 'COACH', 'ADMIN', 'ORG_OWNER', 'ORG_ADMIN'],
+    'TEAM': {
+        'MANAGER': ['TEAM_PRACTICE', 'TEAM_GAME', 'TEAM_SCRIMMAGE', 'TEAM_HANGOUT', 'TEAM_TOURNAMENT', 'TEAM_HOME_OPENER', 'TEAM_PARTY'],
+        'COACH': ['TEAM_PRACTICE', 'TEAM_SCRIMMAGE', 'TEAM_HANGOUT', 'TEAM_TOURNAMENT'],
+        'ADMIN': ['TEAM_PRACTICE', 'TEAM_GAME', 'TEAM_SCRIMMAGE', 'TEAM_HANGOUT', 'TEAM_TOURNAMENT', 'TEAM_HOME_OPENER', 'TEAM_PARTY'],
+        'ORG_OWNER': ['TEAM_PRACTICE', 'TEAM_GAME', 'TEAM_SCRIMMAGE', 'TEAM_HANGOUT', 'TEAM_TOURNAMENT', 'TEAM_HOME_OPENER', 'TEAM_PARTY'],
+        'ORG_ADMIN': ['TEAM_PRACTICE', 'TEAM_GAME', 'TEAM_SCRIMMAGE', 'TEAM_HANGOUT', 'TEAM_TOURNAMENT', 'TEAM_HOME_OPENER', 'TEAM_PARTY'],
+    },
+    'DIVISION': {
+        'ADMIN': ['DIVISION_OPENING_DAY', 'DIVISION_CLOSING_CEREMONY', 'DIVISION_CHAMPIONSHIP', 'DIVISION_TOURNAMENT', 'DIVISION_CLINIC', 'DIVISION_AWARDS', 'DIVISION_ALLSTAR'],
+        'ORG_OWNER': ['DIVISION_OPENING_DAY', 'DIVISION_CLOSING_CEREMONY', 'DIVISION_CHAMPIONSHIP', 'DIVISION_TOURNAMENT', 'DIVISION_CLINIC', 'DIVISION_AWARDS', 'DIVISION_ALLSTAR'],
+        'ORG_ADMIN': ['DIVISION_OPENING_DAY', 'DIVISION_CLOSING_CEREMONY', 'DIVISION_CHAMPIONSHIP', 'DIVISION_TOURNAMENT', 'DIVISION_CLINIC', 'DIVISION_AWARDS', 'DIVISION_ALLSTAR'],
+    },
+    'ORGANIZATION': {
+        'ADMIN': ['LEAGUE_OPENING_DAY', 'LEAGUE_CLOSING_CEREMONY', 'LEAGUE_TOURNAMENT', 'LEAGUE_ALLSTAR_GAME', 'LEAGUE_AWARDS', 'LEAGUE_PLAYOFF', 'LEAGUE_ANNOUNCEMENT'],
+        'ORG_OWNER': ['LEAGUE_OPENING_DAY', 'LEAGUE_CLOSING_CEREMONY', 'LEAGUE_TOURNAMENT', 'LEAGUE_ALLSTAR_GAME', 'LEAGUE_AWARDS', 'LEAGUE_PLAYOFF', 'LEAGUE_ANNOUNCEMENT'],
+        'ORG_ADMIN': ['LEAGUE_OPENING_DAY', 'LEAGUE_CLOSING_CEREMONY', 'LEAGUE_TOURNAMENT', 'LEAGUE_ALLSTAR_GAME', 'LEAGUE_AWARDS', 'LEAGUE_PLAYOFF', 'LEAGUE_ANNOUNCEMENT'],
+    }
 }
 
 
-def can_create_event(user, team, event_type):
+def can_create_event(user, scope, event_type, team=None, division=None, organization=None):
     """
-    Check if a user can create an event of a given type for a team.
+    Check if a user can create an event of a given type at a given scope.
     """
-    # Get user's role (from profile)
+    # Get user's role
     try:
         user_role = user.profile.role
     except:
         return False
     
-    # Check if role is in permitted list for this event type
-    permitted_roles = EVENT_PERMISSIONS.get(event_type, [])
-    if user_role not in permitted_roles:
+    # Check if role is in permitted list for this scope and event type
+    scope_permissions = EVENT_PERMISSIONS.get(scope, {})
+    permitted_types = scope_permissions.get(user_role, [])
+    
+    if event_type not in permitted_types:
         return False
     
-    # Additional check: For non-admin roles, verify they're a coach/manager on this team
-    if user_role in ['MANAGER', 'COACH']:
-        from profiles.models import TeamMembership
-        membership = TeamMembership.objects.filter(
-            user=user, 
-            team=team, 
-            role__in=['MANAGER', 'COACH'],
-            is_active=True
-        ).exists()
-        return membership
+    # Additional checks for team-level events
+    if scope == 'TEAM' and team:
+        if user_role in ['MANAGER', 'COACH']:
+            from profiles.models import TeamMembership
+            membership = TeamMembership.objects.filter(
+                user=user, 
+                team=team, 
+                role__in=['MANAGER', 'COACH'],
+                is_active=True
+            ).exists()
+            return membership
+    
+    # Additional checks for division-level events
+    if scope == 'DIVISION' and division:
+        if user_role not in ['ADMIN', 'ORG_OWNER', 'ORG_ADMIN']:
+            return False
+    
+    # Additional checks for organization-level events
+    if scope == 'ORGANIZATION' and organization:
+        if user_role not in ['ADMIN', 'ORG_OWNER', 'ORG_ADMIN']:
+            return False
     
     return True
 
@@ -68,12 +92,15 @@ def can_delete_event(user, event):
     return can_edit_event(user, event)
 
 
-def get_allowed_event_types(user, team):
+def get_allowed_event_types(user, scope, team=None, division=None, organization=None):
     """
-    Get list of event types a user can create for a team.
+    Get list of event types a user can create at a given scope.
     """
-    allowed = []
-    for event_type in EVENT_PERMISSIONS.keys():
-        if can_create_event(user, team, event_type):
-            allowed.append(event_type)
-    return allowed
+    try:
+        user_role = user.profile.role
+    except:
+        return []
+    
+    scope_permissions = EVENT_PERMISSIONS.get(scope, {})
+    return scope_permissions.get(user_role, [])
+

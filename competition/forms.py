@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.models import User
 from .models import TeamEvent
-from leagues.models import Team
+from leagues.models import Team, Division, Organization
 
 
 class TeamEventForm(forms.ModelForm):
@@ -94,3 +94,72 @@ class GameScoreForm(forms.Form):
         widget=forms.HiddenInput(),
         initial='COMPLETED'
     )
+
+
+class DivisionEventForm(forms.ModelForm):
+    """
+    Form for creating division-level events.
+    """
+    class Meta:
+        model = TeamEvent
+        fields = [
+            'event_type', 'title', 'description', 'date_time', 'location',
+            'opponent_team', 'practice_focus', 'tournament_name', 'tournament_division',
+            'status'
+        ]
+        widgets = {
+            'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Event title'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'date_time': forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'}),
+            'location': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Location'}),
+            'event_type': forms.Select(attrs={'class': 'form-control'}),
+            'status': forms.Select(attrs={'class': 'form-control'}),
+            'opponent_team': forms.Select(attrs={'class': 'form-control'}),
+            'practice_focus': forms.Select(attrs={'class': 'form-control'}),
+            'tournament_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'tournament_division': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, division=None, allowed_event_types=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.division = division
+        if allowed_event_types:
+            event_choices = [
+                (choice[0], choice[1])
+                for choice in TeamEvent.EVENT_TYPE_CHOICES
+                if choice[0] in allowed_event_types and 'DIVISION' in choice[0]
+            ]
+            self.fields['event_type'].choices = event_choices
+
+
+class OrganizationEventForm(forms.ModelForm):
+    """
+    Form for creating organization/league-level events.
+    """
+    class Meta:
+        model = TeamEvent
+        fields = [
+            'event_type', 'title', 'description', 'date_time', 'location',
+            'opponent_team', 'practice_focus', 'status'
+        ]
+        widgets = {
+            'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Event title'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'date_time': forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'}),
+            'location': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Location'}),
+            'event_type': forms.Select(attrs={'class': 'form-control'}),
+            'status': forms.Select(attrs={'class': 'form-control'}),
+            'opponent_team': forms.Select(attrs={'class': 'form-control'}),
+            'practice_focus': forms.Select(attrs={'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, organization=None, allowed_event_types=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.organization = organization
+        if allowed_event_types:
+            event_choices = [
+                (choice[0], choice[1])
+                for choice in TeamEvent.EVENT_TYPE_CHOICES
+                if choice[0] in allowed_event_types and 'LEAGUE' in choice[0]
+            ]
+            self.fields['event_type'].choices = event_choices

@@ -1,20 +1,32 @@
+import uuid
+import random
+from datetime import date, timedelta
+
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from django.utils import timezone
 from faker import Faker
-import random
-from datetime import date, timedelta
 
-from leagues.models import Organization, Season, Team
-from profiles.models import Profile, TeamMembership, Player, PlayerMembership
+from leagues.models import Organization, Season, Division, Team
+from profiles.models import TeamMembership, Player, PlayerMembership
 from competition.models import Game, GameLineupEntry
+
+
+def generate_unique_team_code():
+    for _ in range(20):
+        code = uuid.uuid4().hex[:8].upper()
+        if not Team.objects.filter(access_code=code).exists():
+            return code
+    raise RuntimeError('Unable to generate unique access code for team.')
+
 
 class Command(BaseCommand):
     help = 'Seed the database with sample data for testing'
 
     def handle(self, *args, **options):
         fake = Faker()
-        Faker.seed(42)  # For reproducible data
+        Faker.seed(42)
+        random.seed(42)
 
         self.stdout.write('Seeding database...')
 
@@ -44,7 +56,6 @@ class Command(BaseCommand):
                 password='password123'
             )
 
-            # Update existing profile (created by signal)
             profile = user.profile
             profile.role = random.choice(roles)
             profile.phone_number = fake.phone_number()
@@ -53,8 +64,9 @@ class Command(BaseCommand):
             users.append(user)
             self.stdout.write(f'Created user: {user.username} ({profile.role})')
 
-        # Create seasons
-        seasons = []
+        # Create seasons with divisions
+        division_pool = ['8U', '10U', '12U', 'Majors']
+        teams = []
         for org in organizations:
             season = Season.objects.create(
                 organization=org,
@@ -62,52 +74,58 @@ class Command(BaseCommand):
                 year=fake.year(),
                 is_active=True
             )
-            seasons.append(season)
             self.stdout.write(f'Created season: {season.name} for {org.name}')
 
-        # Create teams
-        teams = []
-        team_names = ['Bombers', 'Eagles', 'Vipers', 'Lions', 'Tigers', 'Bears', 'Sharks', 'Wolves']
-        for season in seasons:
-            for i in range(random.randint(2, 4)):  # 2-4 teams per season
-                team = Team.objects.create(
-                    name=f'{fake.city().split()[0]} {random.choice(team_names)}',
+            # Create 2 divisions per season
+            for div_name in random.sample(division_pool, 2):
+                division = Division.objects.create(
                     season=season,
-                    color=fake.color_name()
+                    name=div_name,
+                    preset_type='AGE_BRACKET',
+                    notes=fake.sentence(nb_words=8)
                 )
-                teams.append(team)
-                self.stdout.write(f'Created team: {team.name}')
+                self.stdout.write(f'  Created division: {division.name}')
+
+                # Create 1-2 teams per division (matches original 2-4 teams per season)
+                team_names_pool = ['Bombers', 'Eagles', 'Vipers', 'Lions', 'Tigers', 'Bears', 'Sharks', 'Wolves']
+                for _ in range(random.randint(1, 2)):
+                    team = Team.objects.create(
+                        name=f'{fake.city().split()[0]} {random.choice(team_names_pool)}',
+                        division=division,
+                        color=fake.color_name(),
+                        access_code=generate_unique_team_code()
+                    )
+                    teams.append(team)
+                    self.stdout.write(f'    Created team: {team.name}')
 
         # Create team memberships (coaches and parents)
         coaches_per_team = 2
         parents_per_team = 5
 
         for team in teams:
-            # Add coaches
             available_coaches = [u for u in users if u.profile.role in ['COACH', 'ORG_OWNER']]
             coaches = random.sample(available_coaches, min(coaches_per_team, len(available_coaches)))
 
             for coach in coaches:
-                membership = TeamMembership.objects.create(
+                TeamMembership.objects.create(
                     user=coach,
                     team=team,
                     role='COACH',
                     is_active=True
                 )
-                self.stdout.write(f'Added coach {coach.username} to {team.name}')
+                self.stdout.write(f'  Added coach {coach.username} to {team.name}')
 
-            # Add parents
             available_parents = [u for u in users if u.profile.role == 'PARENT']
             parents = random.sample(available_parents, min(parents_per_team, len(available_parents)))
 
             for parent in parents:
-                membership = TeamMembership.objects.create(
+                TeamMembership.objects.create(
                     user=parent,
                     team=team,
                     role='PARENT',
                     is_active=True
                 )
-                self.stdout.write(f'Added parent {parent.username} to {team.name}')
+                self.stdout.write(f'  Added parent {parent.username} to {team.name}')
 
         # Create players
         players = []
@@ -116,7 +134,8 @@ class Command(BaseCommand):
             team_parents = [m.user for m in TeamMembership.objects.filter(team=team, role='PARENT')]
 
             for i in range(num_players):
-                guardian = random.choice(team_parents) if team_parents else random.choice([u for u in users if u.profile.role == 'PARENT'])
+                guardian = random.choice(team_parents) if team_parents else random.choice(
+                    [u for u in users if u.profile.role == 'PARENT'])
 
                 player = Player.objects.create(
                     first_name=fake.first_name(),
@@ -126,19 +145,18 @@ class Command(BaseCommand):
                 )
                 players.append(player)
 
-                # Create player membership
                 PlayerMembership.objects.create(
                     player=player,
                     team=team,
-                    jersey_number=random.randint(1, 99),
+                    jersey_number=str(random.randint(1, 99)),
                     is_active=True
                 )
 
-                self.stdout.write(f'Created player: {player.first_name} {player.last_name} for {team.name}')
+                self.stdout.write(f'  Created player: {player.first_name} {player.last_name} for {team.name}')
 
         # Create some games
-        for season in seasons:
-            season_teams = list(Team.objects.filter(season=season))
+        for season in Season.objects.all():
+            season_teams = list(Team.objects.filter(division__season=season))
             if len(season_teams) >= 2:
                 num_games = random.randint(5, 10)
                 for i in range(num_games):
@@ -165,8 +183,7 @@ class Command(BaseCommand):
                     home_players = list(PlayerMembership.objects.filter(team=home_team, is_active=True))
                     away_players = list(PlayerMembership.objects.filter(team=away_team, is_active=True))
 
-                    # Home team lineup
-                    for i, pm in enumerate(home_players[:9], 1):  # Top 9 players
+                    for i, pm in enumerate(home_players[:9], 1):
                         GameLineupEntry.objects.create(
                             game=game,
                             team=home_team,
@@ -176,8 +193,7 @@ class Command(BaseCommand):
                             is_active=True
                         )
 
-                    # Away team lineup
-                    for i, pm in enumerate(away_players[:9], 1):  # Top 9 players
+                    for i, pm in enumerate(away_players[:9], 1):
                         GameLineupEntry.objects.create(
                             game=game,
                             team=away_team,
@@ -187,6 +203,6 @@ class Command(BaseCommand):
                             is_active=True
                         )
 
-                    self.stdout.write(f'Created game: {home_team.name} vs {away_team.name} with lineups')
+                    self.stdout.write(f'  Created game: {home_team.name} vs {away_team.name} with lineups')
 
         self.stdout.write(self.style.SUCCESS('Database seeding completed!'))
