@@ -82,7 +82,8 @@ class Command(BaseCommand):
                     season=season,
                     name=div_name,
                     preset_type='AGE_BRACKET',
-                    notes=fake.sentence(nb_words=8)
+                    notes=fake.sentence(nb_words=8),
+                    allowed_positions=["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "UTL"]
                 )
                 self.stdout.write(f'  Created division: {division.name}')
 

@@ -32,6 +32,7 @@ class LineupEntrySchema(Schema):
     batting_order: int
     position: str | None = None
     is_active: bool
+    division_id: int | None = None
 
 class RuleSchema(Schema):
     title: str
@@ -70,3 +71,17 @@ class GameCreateSchema(Schema):
     away_team_id: UUID
     date_time: datetime
     location: str
+
+class LineupEntryCreateSchema(Schema):
+    team_id: UUID
+    player_id: int
+    batting_order: int
+    position: Optional[str] = None
+
+class LineupEntryUpdateSchema(Schema):
+    batting_order: Optional[int] = None
+    position: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class CloneLineupSchema(Schema):
+    source_game_id: UUID

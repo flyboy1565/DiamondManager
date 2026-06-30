@@ -21,7 +21,7 @@ class SeasonLinkSchema(Schema):
 
 # --- Updated to reflect Team -> Division -> Season ---
 class DivisionLinkSchema(Schema):
-    id: UUID
+    id: int
     name: str
     season: SeasonLinkSchema
 
@@ -41,6 +41,7 @@ class ProfileSchema(Schema):
     user: UserSchema
     role: str
     phone_number: Optional[str] = None
+    organization_id: Optional[UUID] = None
 
 class ProfileUpdateSchema(Schema):
     role: Optional[str] = None

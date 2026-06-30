@@ -215,7 +215,7 @@ def get_game(request, game_id: UUID):
 @router.get("/games/{game_id}/lineup", response=List[schemas.LineupEntrySchema])
 def get_game_lineup(request, game_id: UUID):
     game = get_object_or_404(Game, id=game_id)
-    entries = game.lineup_entries.select_related('team', 'player').all()
+    entries = game.lineup_entries.select_related('team__division', 'player').all()
     return [
         {
             "id": entry.id,
@@ -226,8 +226,106 @@ def get_game_lineup(request, game_id: UUID):
             "batting_order": entry.batting_order,
             "position": entry.position,
             "is_active": entry.is_active,
+            "division_id": entry.team.division_id,
         }
         for entry in entries
+    ]
+
+
+@router.post("/games/{game_id}/lineup/entries", response={201: schemas.LineupEntrySchema, 403: dict})
+def create_lineup_entry(request, game_id: UUID, data: schemas.LineupEntryCreateSchema):
+    game = get_object_or_404(Game, id=game_id)
+    from .models import GameLineupEntry
+    from profiles.models import Player
+    if not _can_score(request, game):
+        return 403, {"message": "Unauthorized."}
+    player = get_object_or_404(Player, id=data.player_id)
+    entry = GameLineupEntry.objects.create(
+        game=game,
+        team_id=data.team_id,
+        player=player,
+        batting_order=data.batting_order,
+        position=data.position or "",
+    )
+    return 201, {
+        "id": entry.id,
+        "team_id": entry.team_id,
+        "team_name": entry.team.name,
+        "player_id": entry.player_id,
+        "player_name": f"{entry.player.first_name} {entry.player.last_name}",
+        "batting_order": entry.batting_order,
+        "position": entry.position,
+        "is_active": entry.is_active,
+        "division_id": entry.team.division_id,
+    }
+
+@router.put("/games/{game_id}/lineup/entries/{entry_id}", response=schemas.LineupEntrySchema)
+def update_lineup_entry(request, game_id: UUID, entry_id: int, data: schemas.LineupEntryUpdateSchema):
+    game = get_object_or_404(Game, id=game_id)
+    from .models import GameLineupEntry
+    entry = get_object_or_404(GameLineupEntry, id=entry_id, game=game)
+    for attr, value in data.dict(exclude_unset=True).items():
+        setattr(entry, attr, value)
+    entry.save()
+    return {
+        "id": entry.id,
+        "team_id": entry.team_id,
+        "team_name": entry.team.name,
+        "player_id": entry.player_id,
+        "player_name": f"{entry.player.first_name} {entry.player.last_name}",
+        "batting_order": entry.batting_order,
+        "position": entry.position,
+        "is_active": entry.is_active,
+        "division_id": entry.team.division_id,
+    }
+
+@router.delete("/games/{game_id}/lineup/entries/{entry_id}", response=dict)
+def delete_lineup_entry(request, game_id: UUID, entry_id: int):
+    game = get_object_or_404(Game, id=game_id)
+    from .models import GameLineupEntry
+    entry = get_object_or_404(GameLineupEntry, id=entry_id, game=game)
+    entry.delete()
+    return {"success": True}
+
+@router.post("/games/{game_id}/lineup/clone", response={201: List[schemas.LineupEntrySchema], 403: dict, 404: dict})
+def clone_lineup(request, game_id: UUID, data: schemas.CloneLineupSchema):
+    game = get_object_or_404(Game, id=game_id)
+    if not _can_score(request, game):
+        return 403, {"message": "Unauthorized."}
+
+    source_game = get_object_or_404(Game, id=data.source_game_id)
+    from .models import GameLineupEntry
+
+    source_entries = GameLineupEntry.objects.filter(game=source_game).select_related('team', 'player')
+    if not source_entries.exists():
+        return 404, {"message": "Source game has no lineup entries."}
+
+    cloned = []
+    for se in source_entries:
+        new_entry, _ = GameLineupEntry.objects.update_or_create(
+            game=game,
+            team=se.team,
+            player=se.player,
+            defaults={
+                "batting_order": se.batting_order,
+                "position": se.position,
+                "is_active": se.is_active,
+            }
+        )
+        cloned.append(new_entry)
+    return 201, [
+        {
+            "id": e.id,
+            "team_id": e.team_id,
+            "team_name": e.team.name,
+            "player_id": e.player_id,
+            "player_name": f"{e.player.first_name} {e.player.last_name}",
+            "batting_order": e.batting_order,
+            "position": e.position,
+            "is_active": e.is_active,
+            "division_id": e.team.division_id,
+        }
+        for e in cloned
     ]
 
 

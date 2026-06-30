@@ -55,6 +55,8 @@ class Division(models.Model):
         verbose_name="League Rule Preset"
     )
     notes = models.TextField(blank=True, null=True)
+    allowed_positions = models.JSONField(default=list, blank=True,
+        help_text="Valid defensive positions for this division. Empty = use defaults.")
 
     class Meta:
         unique_together = ('season', 'name')

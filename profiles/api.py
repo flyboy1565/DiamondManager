@@ -18,8 +18,19 @@ router = Router(auth=JWTAuth())
 
 @router.get("/me", response=schemas.ProfileSchema)
 def get_my_profile(request):
-    # request.user is now automatically populated via the JWT
-    return request.user.profile
+    profile = request.user.profile
+    return {
+        "user": {
+            "id": profile.user.id,
+            "username": profile.user.username,
+            "email": profile.user.email,
+            "first_name": profile.user.first_name,
+            "last_name": profile.user.last_name,
+        },
+        "role": profile.role,
+        "phone_number": profile.phone_number,
+        "organization_id": str(profile.organization_id) if profile.organization_id else None,
+    }
 
 # UPDATE profile (e.g., changing phone number or name)
 @router.put("/me", response=schemas.ProfileSchema)

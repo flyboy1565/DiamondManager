@@ -1,21 +1,19 @@
-from ninja import NinjaAPI
-from ninja_extra import NinjaExtraAPI
-from ninja_jwt.controller import NinjaJWTDefaultController
-from leagues.api import router as leagues_router
-from competition.api import router as competition_router
-from profiles.api import router as profiles_router
-
+from typing import Optional
 from ninja import Schema
 from ninja_extra import route, api_controller, NinjaExtraAPI
 from ninja_jwt.controller import TokenObtainPairController
-# Import the explicit input schema
-from ninja_jwt.schema import TokenObtainPairInputSchema 
+from ninja_jwt.schema import TokenObtainPairInputSchema
+from leagues.api import router as leagues_router
+from competition.api import router as competition_router
+from profiles.api import router as profiles_router 
 
 # 1. Your Custom Schemas (Keep these)
 class UserPayloadSchema(Schema):
     id: int
     username: str
     roles: list[str]
+    profile_role: str = ""
+    organization_id: Optional[str] = None
 
 class CustomTokenOutputSchema(Schema):
     access: str
@@ -39,13 +37,18 @@ class MyTokenController(TokenObtainPairController):
             
         token_data = user_token.to_response_schema()
         
+        profile = getattr(user, 'profile', None)
+        org_id = str(profile.organization_id) if profile and profile.organization_id else None
+        
         return {
             "access": str(token_data.access),
             "refresh": str(token_data.refresh),
             "user": {
                 "id": user.id,
                 "username": user.username,
-                "roles": roles
+                "roles": roles,
+                "profile_role": getattr(profile, 'role', '') if profile else "",
+                "organization_id": org_id,
             }
         }
 
