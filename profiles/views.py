@@ -15,8 +15,9 @@ from django.contrib.auth.models import User
 from django.apps import apps
 
 from leagues.league_blueprints import LEAGUE_BLUEPRINTS
-from .forms import OrganizationForm, SeasonForm, RosterImportForm, DivisionSetupForm, DivisionEditForm, TeamForm
+from .forms import OrganizationForm, SeasonForm, RosterImportForm, DivisionSetupForm, DivisionEditForm, TeamForm, AlertForm, DEFENSIVE_POSITION_CHOICES
 from leagues.models import Division, Season, Team
+from competition.models import Alert
 
 import uuid  # For generating unique access codes for teams
 from .models import Profile, Invitation, Player
@@ -129,8 +130,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context['organization'] = organization
         context['role_label'] = role_label
         context['coaching_teams'] = coaching_teams
+        context['is_admin'] = profile.role in ['ORG_OWNER', 'ORG_ADMIN']
 
         if organization:
+            context['active_alerts'] = Alert.objects.filter(organization=organization, is_active=True).order_by('-created_at')[:5]
             # Toggle to include inactive seasons
             show_inactive = self.request.GET.get('show_inactive') in ['1', 'true', 'True']
             if show_inactive:
@@ -145,6 +148,94 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             context['has_seasons'] = False
             
         return context
+
+
+# ALERTS VIEW
+class AlertsView(LoginRequiredMixin, TemplateView):
+    template_name = 'profiles/admin/alerts.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        profile = self.request.user.profile
+        organization = profile.organization
+
+        if organization:
+            alerts = Alert.objects.filter(organization=organization, is_active=True).order_by('-created_at')
+            context['alerts'] = alerts
+            context['organization'] = organization
+            context['form'] = AlertForm(organization=organization)
+        else:
+            context['alerts'] = Alert.objects.none()
+            context['organization'] = None
+            context['form'] = AlertForm()
+
+        return context
+
+    def post(self, request, *args, **kwargs):
+        profile = request.user.profile
+        organization = profile.organization
+        if profile.role not in ['ORG_OWNER', 'ORG_ADMIN']:
+            messages.error(request, "Only admins can manage alerts.")
+            return redirect('alerts')
+
+        delete_id = request.POST.get('delete_alert')
+        if delete_id:
+            alert = get_object_or_404(Alert, id=delete_id, organization=organization)
+            alert.is_active = False
+            alert.save()
+            messages.success(request, f"Alert '{alert.title}' dismissed.")
+            return redirect('alerts')
+
+        form = AlertForm(request.POST, organization=organization)
+        if form.is_valid():
+            scope = form.cleaned_data['scope']
+            alert = Alert.objects.create(
+                organization=organization,
+                division=form.cleaned_data.get('division') if scope == 'DIVISION' else None,
+                team=form.cleaned_data.get('team') if scope == 'TEAM' else None,
+                title=form.cleaned_data['title'],
+                message=form.cleaned_data['message'],
+                created_by=request.user,
+            )
+            messages.success(request, f"Alert '{alert.title}' created.")
+        else:
+            messages.error(request, "Please fix the form errors.")
+        return redirect('alerts')
+
+
+# DIVISION POSITIONS VIEW
+class DivisionPositionsView(LoginRequiredMixin, TemplateView):
+    template_name = 'profiles/admin/division_positions.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        profile = self.request.user.profile
+        organization = profile.organization
+        context['position_choices'] = DEFENSIVE_POSITION_CHOICES
+
+        if organization:
+            seasons = organization.seasons.filter(is_active=True).order_by('-year', '-season')
+            grouped = {}
+            for season in seasons:
+                divisions = Division.objects.filter(season=season).order_by('name')
+                if divisions:
+                    grouped[season.name] = divisions
+            context['grouped'] = grouped
+
+        return context
+
+    def post(self, request, *args, **kwargs):
+        profile = request.user.profile
+        if profile.role not in ['ORG_OWNER', 'ORG_ADMIN']:
+            messages.error(request, "Only admins can update positions.")
+            return redirect('division_positions')
+
+        division = get_object_or_404(Division, id=request.POST.get('division_id'))
+        positions = request.POST.getlist('positions')
+        division.allowed_positions = positions
+        division.save()
+        messages.success(request, f"Positions updated for {division.name}.")
+        return redirect('division_positions')
 
 
 # 1. STEP ONE: INITIALIZE ORGANIZATION
@@ -289,6 +380,8 @@ class DivisionEditView(LoginRequiredMixin, FormView):
         division.name = form.cleaned_data['name']
         division.preset_type = form.cleaned_data['preset_type']
         division.notes = form.cleaned_data.get('notes', '')
+        positions = form.cleaned_data.get('allowed_positions', [])
+        division.allowed_positions = list(positions)
         division.save()
         messages.success(self.request, f"Updated division {division.name}.")
         return redirect('season_detail', season_id=division.season.id)

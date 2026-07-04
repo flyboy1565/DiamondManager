@@ -1,76 +1,70 @@
 {% extends 'profiles/base.html' %}
 
-{% block title %}Schedule Event - {% if organization %}{{ organization.name }}{% else %}Organization{% endif %}{% endblock %}
+{% block title %}Schedule Event - DiamondManager{% endblock %}
 
 {% block content %}
-<div class="w-full max-w-6xl mx-auto">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-xl">
-        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
-            <div>
-                <h1 class="text-3xl font-bold text-white">Schedule Event</h1>
-                {% if season %}
-                    <p class="text-slate-400">Choose the right scope for {{ season.season }} {{ season.year }}.</p>
-                {% else %}
-                    <p class="text-slate-400">Pick an organization, division, or team event to schedule.</p>
-                {% endif %}
-            </div>
-            {% if organization %}
-                <div class="space-y-2 text-right">
-                    <a href="{% url 'create_organization_event' organization.id %}" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-5 py-3 rounded-lg transition">Organization Event</a>
-                    {% if season %}
-                        <a href="{% url 'schedule_event' %}?season_id={{ season.id }}" class="inline-block bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold px-5 py-3 rounded-lg transition">Refresh Season</a>
-                    {% endif %}
+<div class="max-w-6xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-white">Schedule Event</h1>
+            {% if season %}<p class="text-slate-400 text-sm">{{ season.season }} {{ season.year }}</p>{% endif %}
+        </div>
+        {% if organization %}
+        <div class="flex gap-2">
+            <a href="{% url 'create_organization_event' organization.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg text-sm transition">Organization Event</a>
+            {% if season %}
+            <a href="{% url 'schedule_event' %}?season_id={{ season.id }}" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold px-4 py-2 rounded-lg text-sm transition">Refresh</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if organization %}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-slate-800 border border-slate-700 rounded-lg p-5">
+            <h2 class="text-lg font-semibold text-white mb-3">Division Events</h2>
+            <p class="text-slate-400 text-sm mb-4">Schedule events for an entire division.</p>
+            {% if divisions %}
+            <div class="space-y-2">
+                {% for division in divisions %}
+                <div class="flex items-center justify-between gap-3 bg-slate-900 border border-slate-700 rounded-lg p-4">
+                    <div>
+                        <p class="text-white font-medium">{{ division.name }}</p>
+                        <p class="text-slate-500 text-xs">{{ division.season.name }}</p>
+                    </div>
+                    <a href="{% url 'create_division_event' division.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg px-3 py-1.5 text-sm transition">Schedule</a>
                 </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-slate-400 text-sm">No divisions found.</p>
             {% endif %}
         </div>
 
-        {% if organization %}
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6">
-                    <h2 class="text-xl font-semibold text-white mb-3">Division Events</h2>
-                    <p class="text-slate-400 mb-4">Schedule events for an entire division.</p>
-                    {% if divisions %}
-                        <div class="space-y-3">
-                            {% for division in divisions %}
-                                <div class="flex items-center justify-between gap-3 bg-slate-800 border border-slate-700 rounded-xl p-4">
-                                    <div>
-                                        <p class="text-white font-semibold">{{ division.name }}</p>
-                                        <p class="text-slate-500 text-sm">{{ division.season.name }}</p>
-                                    </div>
-                                    <a href="{% url 'create_division_event' division.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg px-4 py-2 text-sm">Schedule</a>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <div class="text-slate-400">No divisions found for the selected season.</div>
-                    {% endif %}
+        <div class="bg-slate-800 border border-slate-700 rounded-lg p-5">
+            <h2 class="text-lg font-semibold text-white mb-3">Team Events</h2>
+            <p class="text-slate-400 text-sm mb-4">Schedule an event for a single team.</p>
+            {% if teams %}
+            <div class="space-y-2">
+                {% for team in teams %}
+                <div class="flex items-center justify-between gap-3 bg-slate-900 border border-slate-700 rounded-lg p-4">
+                    <div>
+                        <p class="text-white font-medium">{{ team.name }}</p>
+                        <p class="text-slate-500 text-xs">{{ team.division.name }}</p>
+                    </div>
+                    <a href="{% url 'create_event' team.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg px-3 py-1.5 text-sm transition">Schedule</a>
                 </div>
-
-                <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6">
-                    <h2 class="text-xl font-semibold text-white mb-3">Team Events</h2>
-                    <p class="text-slate-400 mb-4">Schedule an event for a single team.</p>
-                    {% if teams %}
-                        <div class="space-y-3">
-                            {% for team in teams %}
-                                <div class="flex items-center justify-between gap-3 bg-slate-800 border border-slate-700 rounded-xl p-4">
-                                    <div>
-                                        <p class="text-white font-semibold">{{ team.name }}</p>
-                                        <p class="text-slate-500 text-sm">{{ team.division.name }}</p>
-                                    </div>
-                                    <a href="{% url 'create_event' team.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg px-4 py-2 text-sm">Schedule</a>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <div class="text-slate-400">No teams found for the selected season.</div>
-                    {% endif %}
-                </div>
+                {% endfor %}
             </div>
-        {% else %}
-            <div class="text-center py-12 text-slate-400">
-                <p>No organization found for your account.</p>
-            </div>
-        {% endif %}
+            {% else %}
+            <p class="text-slate-400 text-sm">No teams found.</p>
+            {% endif %}
+        </div>
     </div>
+    {% else %}
+    <div class="bg-slate-800 border border-slate-700 rounded-lg py-16 text-center">
+        <p class="text-slate-400">No organization found.</p>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

@@ -124,10 +124,29 @@ class RosterImportForm(forms.Form):
         return cleaned_data
 
 
+DEFENSIVE_POSITION_CHOICES = [
+    ('P', 'Pitcher'), ('C', 'Catcher'), ('1B', 'First Base'), ('2B', 'Second Base'),
+    ('3B', 'Third Base'), ('SS', 'Shortstop'), ('LF', 'Left Field'), ('CF', 'Center Field'),
+    ('RF', 'Right Field'), ('DH', 'Designated Hitter'), ('UTL', 'Utility'),
+]
+
 class DivisionEditForm(forms.ModelForm):
+    allowed_positions = forms.MultipleChoiceField(
+        choices=DEFENSIVE_POSITION_CHOICES,
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'flex flex-wrap gap-3'}),
+        required=False,
+        label="Allowed Positions"
+    )
+
     class Meta:
         model = apps.get_model('leagues', 'Division')
         fields = ['name', 'preset_type', 'notes']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            current = self.instance.allowed_positions or []
+            self.fields['allowed_positions'].initial = [p for p in current if p in dict(DEFENSIVE_POSITION_CHOICES)]
 
 
 class TeamForm(forms.ModelForm):
@@ -150,6 +169,32 @@ class PlayerCreateForm(forms.ModelForm):
     class Meta:
         model = apps.get_model('profiles', 'Player')
         fields = ['first_name', 'last_name', 'date_of_birth_field', 'guardian']
+
+
+class AlertForm(forms.Form):
+    title = forms.CharField(max_length=200, widget=forms.TextInput(attrs={'placeholder': 'Alert title', 'class': 'w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500'}))
+    message = forms.CharField(widget=forms.Textarea(attrs={'rows': 4, 'placeholder': 'Alert message', 'class': 'w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500'}))
+    scope = forms.ChoiceField(
+        choices=[('ORGANIZATION', 'Organization-wide'), ('DIVISION', 'Division'), ('TEAM', 'Team')],
+        initial='ORGANIZATION',
+        widget=forms.Select(attrs={'class': 'w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500'})
+    )
+    division = forms.ModelChoiceField(
+        queryset=apps.get_model('leagues', 'Division').objects.none(),
+        required=False,
+        widget=forms.Select(attrs={'class': 'w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500'})
+    )
+    team = forms.ModelChoiceField(
+        queryset=apps.get_model('leagues', 'Team').objects.none(),
+        required=False,
+        widget=forms.Select(attrs={'class': 'w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500'})
+    )
+
+    def __init__(self, *args, organization=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if organization:
+            self.fields['division'].queryset = apps.get_model('leagues', 'Division').objects.filter(season__organization=organization)
+            self.fields['team'].queryset = apps.get_model('leagues', 'Team').objects.filter(division__season__organization=organization)
 
 
 class GameCreateForm(forms.Form):

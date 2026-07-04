@@ -12,10 +12,12 @@ from .views import (
     DashboardView,
     SeasonDetailView,
     DivisionEditView,
+    DivisionPositionsView,
     TeamDetailView,
     CreateCoachView,
     CreatePlayerView,
     CreateGameView,
+    AlertsView,
 )
 
 urlpatterns = [
@@ -36,4 +38,6 @@ urlpatterns = [
     path('admin/team/<uuid:team_id>/coaches/new/', CreateCoachView.as_view(), name='create_coach'),
     path('admin/team/<uuid:team_id>/players/new/', CreatePlayerView.as_view(), name='create_player'),
     path('admin/team/<uuid:team_id>/games/new/', CreateGameView.as_view(), name='create_game'),
+    path('admin/alerts/', AlertsView.as_view(), name='alerts'),
+    path('admin/positions/', DivisionPositionsView.as_view(), name='division_positions'),
 ]

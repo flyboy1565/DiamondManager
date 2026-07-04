@@ -3,17 +3,12 @@
 {% block title %}Create Event - {% if team %}{{ team.name }}{% elif division %}{{ division.name }}{% elif organization %}{{ organization.name }}{% else %}Event{% endif %}{% endblock %}
 
 {% block content %}
-<div class="w-full max-w-2xl mx-auto px-4 py-8">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 md:p-8 shadow-xl">
-        <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">Create New Event</h1>
-        <p class="text-slate-400 mb-2">{% if team %}{{ team.name }}{% elif division %}{{ division.name }}{% elif organization %}{{ organization.name }}{% endif %}</p>
-        {% if division %}
-            <p class="text-slate-400 mb-8 text-sm">This division event will propagate to every team in the division.</p>
-        {% elif organization %}
-            <p class="text-slate-400 mb-8 text-sm">This organization event will propagate to every team in the league.</p>
-        {% else %}
-            <p class="text-slate-400 mb-8">Create the event and your team will see it on their schedule.</p>
-        {% endif %}
+<div class="max-w-3xl mx-auto">
+    <h1 class="text-2xl font-bold text-white mb-2">Create New Event</h1>
+    <p class="text-slate-400 mb-6">{% if team %}{{ team.name }}{% elif division %}{{ division.name }}{% elif organization %}{{ organization.name }}{% endif %}
+    {% if division %} &mdash; This event will propagate to every team.{% elif organization %} &mdash; This event will propagate to every team.{% endif %}</p>
+
+    <div class="bg-slate-800 border border-slate-700 rounded-lg p-6">
 
         <form method="post" class="space-y-6">
             {% csrf_token %}

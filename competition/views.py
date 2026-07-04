@@ -1,12 +1,13 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
-from django.views.generic import ListView, CreateView, UpdateView, DetailView, TemplateView
+from django.views.generic import ListView, CreateView, UpdateView, DetailView, TemplateView, View
 from django.db.models import Q
 from leagues.models import Team, Division, Organization, Season
-from .models import TeamEvent
-from .forms import TeamEventForm, GameScoreForm, DivisionEventForm, OrganizationEventForm
+from .models import TeamEvent, Game, GameLineupEntry
+from .forms import TeamEventForm, GameScoreForm, DivisionEventForm, OrganizationEventForm, LineupEntryForm, DEFENSIVE_POSITION_CHOICES
 from .permissions import can_create_event, can_edit_event, get_allowed_event_types
+from profiles.models import PlayerMembership
 
 
 class TeamEventsListView(LoginRequiredMixin, ListView):
@@ -345,4 +346,117 @@ class ScheduleEventChoiceView(LoginRequiredMixin, TemplateView):
         context['divisions'] = Division.objects.filter(season=season).order_by('name') if season else Division.objects.none()
         context['teams'] = Team.objects.filter(division__season=season).order_by('name') if season else Team.objects.none()
         return context
+
+
+# ==============================================================================
+# GAME DETAIL + LINEUP VIEW
+# ==============================================================================
+
+class GameDetailView(LoginRequiredMixin, View):
+    """Show game details with lineups for both teams and optional score entry."""
+
+    def get(self, request, game_id):
+        game = get_object_or_404(Game, id=game_id)
+        profile = request.user.profile
+        can_score = self._can_edit_lineup(request, game)
+
+        def split_entries(team):
+            all_entries = GameLineupEntry.objects.filter(game=game, team=team).select_related('player').order_by('batting_order')
+            field = [e for e in all_entries if e.position]
+            bench = [e for e in all_entries if not e.position]
+            return field, bench
+
+        home_field, home_bench = split_entries(game.home_team)
+        away_field, away_bench = split_entries(game.away_team) if game.away_team else ([], [])
+
+        home_form = LineupEntryForm(team=game.home_team) if can_score else None
+        away_form = LineupEntryForm(team=game.away_team) if can_score and game.away_team else None
+
+        return render(request, 'competition/game_detail.html', {
+            'game': game,
+            'home_field': home_field,
+            'home_bench': home_bench,
+            'away_field': away_field,
+            'away_bench': away_bench,
+            'home_form': home_form,
+            'away_form': away_form,
+            'can_score': can_score,
+            'score_form': GameScoreForm() if can_score and not game.is_completed else None,
+            'position_choices': DEFENSIVE_POSITION_CHOICES,
+        })
+
+    def post(self, request, game_id):
+        game = get_object_or_404(Game, id=game_id)
+        if not self._can_edit_lineup(request, game):
+            messages.error(request, "You don't have permission to modify this game.")
+            return redirect('game_detail', game_id=game.id)
+
+        action = request.POST.get('action')
+
+        # Score entry
+        if action == 'save_score':
+            form = GameScoreForm(request.POST)
+            if form.is_valid():
+                game.home_score = form.cleaned_data['home_score']
+                game.away_score = form.cleaned_data['away_score']
+                game.is_completed = True
+                game.is_live = False
+                game.save()
+                messages.success(request, "Score recorded.")
+            else:
+                messages.error(request, "Invalid score values.")
+            return redirect('game_detail', game_id=game.id)
+
+        # Add lineup entry
+        if action == 'add_entry':
+            team_id = request.POST.get('team_id')
+            team = get_object_or_404(Team, id=team_id)
+            form = LineupEntryForm(request.POST, team=team)
+            if form.is_valid():
+                player = form.cleaned_data['player']
+                batting_order = form.cleaned_data['batting_order']
+                position = form.cleaned_data.get('position', '')
+                entry, created = GameLineupEntry.objects.get_or_create(
+                    game=game, player=player,
+                    defaults={'team': team, 'batting_order': batting_order, 'position': position}
+                )
+                if not created:
+                    entry.team = team
+                    entry.batting_order = batting_order
+                    entry.position = position
+                    entry.save()
+                messages.success(request, f"Added {player} to lineup.")
+            else:
+                messages.error(request, "Invalid entry data.")
+            return redirect('game_detail', game_id=game.id)
+
+        # Delete lineup entry
+        if action == 'delete_entry':
+            entry_id = request.POST.get('entry_id')
+            entry = get_object_or_404(GameLineupEntry, id=entry_id, game=game)
+            entry.delete()
+            messages.success(request, "Entry removed from lineup.")
+            return redirect('game_detail', game_id=game.id)
+
+        # Update entry position/batting order
+        if action == 'update_entry':
+            entry_id = request.POST.get('entry_id')
+            entry = get_object_or_404(GameLineupEntry, id=entry_id, game=game)
+            batting_order = request.POST.get('batting_order')
+            position = request.POST.get('position', '')
+            if batting_order:
+                entry.batting_order = int(batting_order)
+            entry.position = position
+            entry.save()
+            messages.success(request, "Lineup entry updated.")
+            return redirect('game_detail', game_id=game.id)
+
+        return redirect('game_detail', game_id=game.id)
+
+    def _can_edit_lineup(self, request, game):
+        profile = request.user.profile
+        if profile.role in ['ORG_OWNER', 'ORG_ADMIN', 'SCORER']:
+            return True
+        team_ids = Team.objects.filter(coaches=request.user).values_list('id', flat=True)
+        return game.home_team_id in team_ids or game.away_team_id in team_ids
 

@@ -1,31 +1,33 @@
 {% extends 'profiles/base.html' %}
 
-{% block title %}Add Game - DiamondManager{% endblock %}
+{% block title %}Create Game - DiamondManager{% endblock %}
 
 {% block content %}
-<div class="w-full max-w-2xl">
-  <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-xl">
-    <h1 class="text-2xl font-bold text-white mb-4">Create Game for {{ team.name }}</h1>
-    <form method="POST" class="space-y-4">
-      {% csrf_token %}
-      <div>
-        <label class="block text-sm font-semibold text-slate-300 mb-2">Date & Time</label>
-        {{ form.date_time }}
-      </div>
-      <div>
-        <label class="block text-sm font-semibold text-slate-300 mb-2">Location</label>
-        {{ form.location }}
-      </div>
-      <div>
-        <label class="block text-sm font-semibold text-slate-300 mb-2">Is Home Game?</label>
-        {{ form.is_home }}
-      </div>
-      <div>
-        <label class="block text-sm font-semibold text-slate-300 mb-2">Opponent Name (optional)</label>
-        {{ form.opponent_name }}
-      </div>
-      <button type="submit" class="bg-emerald-600 text-white px-4 py-2 rounded">Create Game</button>
-    </form>
-  </div>
+<div class="max-w-2xl mx-auto">
+    <h1 class="text-2xl font-bold text-white mb-2">Create Game</h1>
+    <p class="text-slate-400 mb-6">Schedule a game for {{ team.name }}.</p>
+
+    <div class="bg-slate-800 border border-slate-700 rounded-lg p-6">
+        <form method="POST" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Date & Time</label>
+                {{ form.date_time }}
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Location</label>
+                {{ form.location }}
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Is Home Game?</label>
+                {{ form.is_home }}
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Opponent Name</label>
+                {{ form.opponent_name }}
+            </div>
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-lg transition">Create Game</button>
+        </form>
+    </div>
 </div>
 {% endblock %}

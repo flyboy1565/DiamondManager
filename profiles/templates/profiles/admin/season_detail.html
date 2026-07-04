@@ -3,79 +3,70 @@
 {% block title %}Season Detail - DiamondManager{% endblock %}
 
 {% block content %}
-<div class="w-full max-w-4xl">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-xl">
-        <div class="flex items-center justify-between mb-6">
-            <div>
-                <h1 class="text-3xl font-bold text-white">{{ season.season }} {{ season.year }}</h1>
-                <p class="text-slate-400">Divisions and teams for this season.</p>
-            </div>
-            <div class="flex flex-wrap gap-3">
-                <a href="{% url 'schedule_event' %}?season_id={{ season.id }}" class="inline-block bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 px-4 rounded">Schedule Event</a>
-                <a href="{% url 'create_division' season.id %}" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 px-4 rounded">Add Divisions</a>
-                <a href="{% url 'roster_onboarding' season.id %}" class="ml-3 inline-block bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2 px-4 rounded">Manage Rosters</a>
-            </div>
+<div class="max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ season.season }} {{ season.year }}</h1>
+            <p class="text-slate-400">Divisions and teams for this season.</p>
         </div>
-
-        {% if grouped_divisions %}
-            <div class="space-y-6">
-                {% for group in grouped_divisions %}
-                    <div class="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-                            <h3 class="text-lg font-semibold text-white">{{ group.division.name }}</h3>
-                            <div class="flex items-center gap-2">
-                                <a href="{% url 'create_team' group.division.id %}" class="text-sm bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded">Add Team</a>
-                                <a href="{% url 'edit_division' group.division.id %}" class="text-sm bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded">Edit</a>
-                            </div>
-                        </div>
-
-                        {% if group.teams %}
-                            <div class="overflow-x-auto">
-                                <table class="min-w-full divide-y divide-slate-700 text-left text-sm">
-                                    <thead class="bg-slate-800 text-slate-300">
-                                        <tr>
-                                            <th class="px-4 py-3">Team Name</th>
-                                            <th class="px-4 py-3">Coach Name</th>
-                                            <th class="px-4 py-3"># Coaches</th>
-                                            <th class="px-4 py-3"># Players</th>
-                                            <th class="px-4 py-3"># Fans</th>
-                                            <th class="px-4 py-3">Record</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-slate-700 bg-slate-950 text-slate-200">
-                                        {% for row in group.teams %}
-                                            <tr>
-                                                <td class="px-4 py-3 font-semibold"><a href="{% url 'team_detail' row.team.id %}" class="text-blue-400 hover:text-blue-300">{{ row.team.name }}</a></td>
-                                                <td class="px-4 py-3">{{ row.coach_label|default:'—' }}</td>
-                                                <td class="px-4 py-3">{{ row.coach_count }}</td>
-                                                <td class="px-4 py-3">{{ row.player_count }}</td>
-                                                <td class="px-4 py-3">{{ row.fan_count }}</td>
-                                                <td class="px-4 py-3">{{ row.record }}</td>
-                                            </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        {% else %}
-                            <div class="text-center py-12">
-                                <div class="mx-auto w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mb-4">
-                                    <span class="text-3xl">📅</span>
-                                </div>
-                                <h3 class="text-xl font-semibold text-white mb-2">No teams in this division yet.</h3>
-                                <p class="text-slate-400 mb-8">Start by creating a team.</p>
-                                <a href="{% url 'create_team' group.division.id %}" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-8 rounded-lg shadow transition">
-                                    Create New Team
-                                </a>
-                            </div>
-                        {% endif %}
-                    </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div class="text-center py-12">
-                <p class="text-slate-400">No divisions created yet for this season.</p>
-            </div>
-        {% endif %}
+        <div class="flex gap-2">
+            <a href="{% url 'create_division' season.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 px-4 rounded-lg text-sm transition">Add Divisions</a>
+            <a href="{% url 'roster_onboarding' season.id %}" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2 px-4 rounded-lg text-sm transition">Manage Rosters</a>
+            <a href="{% url 'schedule_event' %}?season_id={{ season.id }}" class="bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 px-4 rounded-lg text-sm transition">Schedule Event</a>
+        </div>
     </div>
+
+    {% if grouped_divisions %}
+    <div class="space-y-4">
+        {% for group in grouped_divisions %}
+        <div class="bg-slate-800 border border-slate-700 rounded-lg">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700">
+                <h3 class="text-lg font-semibold text-white">{{ group.division.name }}</h3>
+                <div class="flex gap-2">
+                    <a href="{% url 'create_team' group.division.id %}" class="text-sm bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded transition">Add Team</a>
+                    <a href="{% url 'edit_division' group.division.id %}" class="text-sm bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded transition">Edit</a>
+                </div>
+            </div>
+            {% if group.teams %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+                        <tr>
+                            <th class="px-5 py-3 text-left font-semibold">Team Name</th>
+                            <th class="px-5 py-3 text-left font-semibold">Coach</th>
+                            <th class="px-5 py-3 text-center font-semibold">Coaches</th>
+                            <th class="px-5 py-3 text-center font-semibold">Players</th>
+                            <th class="px-5 py-3 text-center font-semibold">Fans</th>
+                            <th class="px-5 py-3 text-center font-semibold">Record</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700">
+                        {% for row in group.teams %}
+                        <tr class="hover:bg-slate-700/30 transition">
+                            <td class="px-5 py-3 font-medium"><a href="{% url 'team_detail' row.team.id %}" class="text-blue-400 hover:text-blue-300">{{ row.team.name }}</a></td>
+                            <td class="px-5 py-3 text-slate-300">{{ row.coach_label|default:'—' }}</td>
+                            <td class="px-5 py-3 text-center text-slate-300">{{ row.coach_count }}</td>
+                            <td class="px-5 py-3 text-center text-slate-300">{{ row.player_count }}</td>
+                            <td class="px-5 py-3 text-center text-slate-300">{{ row.fan_count }}</td>
+                            <td class="px-5 py-3 text-center font-mono">{{ row.record }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="py-12 text-center">
+                <p class="text-slate-400 mb-4">No teams in this division yet.</p>
+                <a href="{% url 'create_team' group.division.id %}" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 px-6 rounded-lg transition">Create New Team</a>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-slate-800 border border-slate-700 rounded-lg py-16 text-center">
+        <p class="text-slate-400">No divisions created yet for this season.</p>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

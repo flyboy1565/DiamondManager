@@ -3,125 +3,155 @@
 {% block title %}Dashboard - DiamondManager{% endblock %}
 
 {% block content %}
-<div class="w-full max-w-5xl">
-    <!-- Organization Header -->
+<div class="max-w-7xl mx-auto">
     {% if organization %}
-    <div class="bg-gradient-to-r from-slate-800 to-slate-900 border border-slate-700 rounded-2xl p-8 shadow-xl mb-8">
-        <div class="flex items-start justify-between">
-            <div>
-                <h1 class="text-4xl font-bold text-white mb-2">{{ organization.name }}</h1>
-                <p class="text-slate-400 text-lg">{{ organization.city }}, {{ organization.state }} {{ organization.zip_code }}</p>
-            </div>
-            <div class="text-right space-y-3">
-                <a href="{% url 'schedule_event' %}" class="inline-block bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-lg shadow transition">Schedule Event</a>
-                <div class="inline-block bg-emerald-500/10 text-emerald-400 text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full border border-emerald-500/20">
-                    {{ role_label }}
-                </div>
-            </div>
+    <!-- Organization Header -->
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ organization.name }}</h1>
+            <p class="text-slate-400">{{ organization.city }}, {{ organization.state }} {{ organization.zip_code }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{% url 'schedule_event' %}" class="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-lg shadow transition text-sm">Schedule Event</a>
+            <span class="bg-emerald-500/10 text-emerald-400 text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full border border-emerald-500/20">{{ role_label }}</span>
         </div>
     </div>
 
+    {% if is_admin %}
+    <!-- Admin Quick Actions -->
+    <div class="grid grid-cols-5 gap-4 mb-8">
+        <a href="{% url 'alerts' %}" class="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-amber-500 transition group">
+            <div class="text-2xl mb-2">&#x1f514;</div>
+            <h3 class="text-lg font-semibold text-white group-hover:text-amber-400 transition">Alerts</h3>
+            <p class="text-slate-400 text-sm">{{ active_alerts|length }} active</p>
+        </a>
+        <a href="{% url 'division_positions' %}" class="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-emerald-500 transition group">
+            <div class="text-2xl mb-2">&#x26a1;</div>
+            <h3 class="text-lg font-semibold text-white group-hover:text-emerald-400 transition">Positions</h3>
+            <p class="text-slate-400 text-sm">Per division</p>
+        </a>
+        <a href="{% url 'schedule_event' %}" class="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-blue-500 transition group">
+            <div class="text-2xl mb-2">&#x1f4c5;</div>
+            <h3 class="text-lg font-semibold text-white group-hover:text-blue-400 transition">Schedule</h3>
+            <p class="text-slate-400 text-sm">Create events</p>
+        </a>
+        <a href="{% url 'create_season' %}" class="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-emerald-500 transition group">
+            <div class="text-2xl mb-2">&#x1f4c6;</div>
+            <h3 class="text-lg font-semibold text-white group-hover:text-emerald-400 transition">Season</h3>
+            <p class="text-slate-400 text-sm">New season</p>
+        </a>
+        <a href="{% url 'create_org' %}" class="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-purple-500 transition group">
+            <div class="text-2xl mb-2">&#x2699;&#xfe0f;</div>
+            <h3 class="text-lg font-semibold text-white group-hover:text-purple-400 transition">Settings</h3>
+            <p class="text-slate-400 text-sm">Organization</p>
+        </a>
+    </div>
+    {% endif %}
+
     <!-- Seasons Section -->
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-xl">
-        <div class="flex items-center justify-between mb-6">
-            <h2 class="text-2xl font-bold text-white">Seasons</h2>
+    <div class="mb-8">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-white">Seasons</h2>
             <div class="flex items-center gap-3">
-                <form method="get" class="inline-block">
+                <form method="get">
                     {% if show_inactive %}
-                        <button type="submit" name="show_inactive" value="0" class="text-sm px-3 py-2 bg-slate-700 rounded text-slate-200">Hide Inactive</button>
+                        <button type="submit" name="show_inactive" value="0" class="text-sm px-3 py-1.5 bg-slate-700 rounded text-slate-200 hover:bg-slate-600 transition">Hide Inactive</button>
                     {% else %}
-                        <button type="submit" name="show_inactive" value="1" class="text-sm px-3 py-2 bg-slate-700 rounded text-slate-200">Show Inactive</button>
+                        <button type="submit" name="show_inactive" value="1" class="text-sm px-3 py-1.5 bg-slate-700 rounded text-slate-200 hover:bg-slate-600 transition">Show Inactive</button>
                     {% endif %}
                 </form>
-                <a href="{% url 'create_season' %}" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg shadow transition">
+                <a href="{% url 'create_season' %}" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-1.5 rounded-lg shadow transition text-sm">
                     + New Season
                 </a>
             </div>
         </div>
 
         {% if has_seasons %}
-            <!-- Seasons Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {% for season in seasons %}
-                <div class="bg-slate-900 border border-slate-700 rounded-lg p-6 hover:border-emerald-500 transition">
-                    <div class="flex items-start justify-between mb-4">
-                        <div>
-                            <h3 class="text-lg font-semibold text-white">{{ season.season }}</h3>
-                            <p class="text-slate-400 text-sm">{{ season.year }}</p>
-                        </div>
-                        {% if season.is_active %}
-                        <span class="bg-emerald-500/20 text-emerald-300 text-xs font-bold uppercase px-2 py-1 rounded">
-                            Active
-                        </span>
-                        {% else %}
-                        <span class="bg-slate-700/50 text-slate-400 text-xs font-bold uppercase px-2 py-1 rounded">
-                            Inactive
-                        </span>
-                        {% endif %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {% for season in seasons %}
+            <div class="bg-slate-800 border border-slate-700 rounded-lg p-5 hover:border-emerald-500 transition">
+                <div class="flex items-start justify-between mb-3">
+                    <div>
+                        <h3 class="font-semibold text-white">{{ season.season }}</h3>
+                        <p class="text-slate-400 text-sm">{{ season.year }}</p>
                     </div>
-                    
-                    <p class="text-slate-400 text-sm mb-4">
-                        <strong>{{ season.teams.count }}</strong> team{{ season.teams.count|pluralize }}
-                    </p>
-                    
-                    <div class="space-y-3">
-                        <div class="space-y-3">
-                            <a href="{% url 'season_detail' season.id %}" class="inline-block w-full text-center bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2 rounded transition">
-                                View Season
-                            </a>
-                            <a href="{% url 'create_division' season.id %}" class="inline-block w-full text-center bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 rounded transition">
-                                Add Divisions
-                            </a>
-                        </div>
-                    </div>
+                    {% if season.is_active %}
+                    <span class="bg-emerald-500/20 text-emerald-300 text-xs font-bold uppercase px-2 py-0.5 rounded">Active</span>
+                    {% else %}
+                    <span class="bg-slate-700/50 text-slate-400 text-xs font-bold uppercase px-2 py-0.5 rounded">Inactive</span>
+                    {% endif %}
                 </div>
-                {% endfor %}
+                <p class="text-slate-400 text-sm mb-3"><strong>{{ season.teams.count }}</strong> team{{ season.teams.count|pluralize }}</p>
+                <div class="flex gap-2">
+                    <a href="{% url 'season_detail' season.id %}" class="flex-1 text-center bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium py-1.5 rounded transition">View</a>
+                    <a href="{% url 'create_division' season.id %}" class="flex-1 text-center bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium py-1.5 rounded transition">Divisions</a>
+                </div>
             </div>
+            {% endfor %}
+        </div>
         {% else %}
-            <!-- No Seasons State -->
-            <div class="text-center py-12">
-                <div class="mx-auto w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mb-4">
-                    <span class="text-3xl">📅</span>
-                </div>
-                <h3 class="text-xl font-semibold text-white mb-2">No Seasons Yet</h3>
-                <p class="text-slate-400 mb-8">Start by creating your first season. You'll be able to manage teams, rosters, and games.</p>
-                <a href="{% url 'create_season' %}" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-8 rounded-lg shadow transition">
-                    Create Your First Season
-                </a>
-            </div>
-        {% endif %}
-
-        {% if coaching_teams %}
-            <div class="bg-slate-900 border border-slate-700 rounded-lg p-6 mt-8">
-                <h3 class="text-xl font-semibold text-white mb-4">Coaching Teams</h3>
-                <ul class="space-y-3">
-                    {% for team in coaching_teams %}
-                        <li class="bg-slate-800 border border-slate-700 rounded-lg p-4">
-                            <div class="flex items-center justify-between gap-4">
-                                <div>
-                                    <p class="text-white font-semibold">{{ team.name }}</p>
-                                    <p class="text-slate-400 text-sm">Season: {{ team.season.name }}</p>
-                                </div>
-                                <a href="{% url 'team_detail' team.id %}" class="text-sky-400 hover:text-sky-300 text-sm font-semibold">View Team</a>
-                            </div>
-                        </li>
-                    {% endfor %}
-                </ul>
-            </div>
+        <div class="bg-slate-800 border border-slate-700 rounded-lg py-16 text-center">
+            <div class="text-4xl mb-4">&#x1f4c5;</div>
+            <h3 class="text-xl font-semibold text-white mb-2">No Seasons Yet</h3>
+            <p class="text-slate-400 mb-6">Start by creating your first season.</p>
+            <a href="{% url 'create_season' %}" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-6 rounded-lg shadow transition">Create Your First Season</a>
+        </div>
         {% endif %}
     </div>
 
-    {% else %}
-    <!-- No Organization State -->
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-12 shadow-xl text-center">
-        <div class="mx-auto w-20 h-20 bg-slate-700/50 rounded-full flex items-center justify-center mb-6">
-            <span class="text-5xl">🏢</span>
+    <!-- Active Alerts -->
+    {% if active_alerts %}
+    <div class="mb-8">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-white">Active Alerts</h2>
+            <a href="{% url 'alerts' %}" class="text-sm text-amber-400 hover:text-amber-300 font-semibold">View All</a>
         </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% for alert in active_alerts %}
+            <div class="bg-slate-800 border border-slate-700 rounded-lg p-4">
+                <div class="flex items-start gap-3">
+                    <span class="text-rose-400 shrink-0 mt-0.5">&#x1f514;</span>
+                    <div>
+                        <h4 class="text-white font-semibold">{{ alert.title }}</h4>
+                        <p class="text-slate-400 text-sm">{{ alert.message|truncatechars:120 }}</p>
+                        <p class="text-slate-500 text-xs mt-1">{{ alert.created_at|date:"M d, Y H:i" }}</p>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Coaching Teams -->
+    {% if coaching_teams %}
+    <div>
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-white">Coaching Teams</h2>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for team in coaching_teams %}
+            <div class="bg-slate-800 border border-slate-700 rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-white font-semibold">{{ team.name }}</p>
+                        <p class="text-slate-400 text-sm">Season: {{ team.season.name }}</p>
+                    </div>
+                    <a href="{% url 'team_detail' team.id %}" class="text-sky-400 hover:text-sky-300 text-sm font-semibold">View Team</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <!-- No Organization -->
+    <div class="max-w-lg mx-auto py-20 text-center">
+        <div class="text-5xl mb-6">&#x1f3e2;</div>
         <h2 class="text-2xl font-bold text-white mb-3">Organization Not Found</h2>
-        <p class="text-slate-400 mb-8">It looks like you don't have an organization set up yet. Create one to get started managing your league.</p>
-        <a href="{% url 'create_org' %}" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-8 rounded-lg shadow transition">
-            Create Organization
-        </a>
+        <p class="text-slate-400 mb-8">Create one to get started managing your league.</p>
+        <a href="{% url 'create_org' %}" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-8 rounded-lg shadow transition">Create Organization</a>
     </div>
     {% endif %}
 </div>

@@ -1,0 +1,81 @@
+{% extends 'profiles/base.html' %}
+
+{% block title %}Game Detail - DiamondManager{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Game Header -->
+    <div class="bg-gradient-to-r from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-6 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <a href="{% url 'team_detail' game.home_team.id %}" class="text-slate-400 hover:text-white transition text-sm">&larr; Back</a>
+            {% if game.is_completed %}
+            <span class="bg-emerald-500/20 text-emerald-300 text-xs font-bold uppercase px-3 py-1 rounded-full border border-emerald-500/30">Completed</span>
+            {% elif game.is_live %}
+            <span class="bg-rose-500/20 text-rose-300 text-xs font-bold uppercase px-3 py-1 rounded-full border border-rose-500/30 animate-pulse">Live</span>
+            {% else %}
+            <span class="bg-blue-500/20 text-blue-300 text-xs font-bold uppercase px-3 py-1 rounded-full border border-blue-500/30">Scheduled</span>
+            {% endif %}
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 items-center gap-4">
+            <div class="text-center md:text-right">
+                <h2 class="text-xl font-bold text-white">{{ game.home_team.name }}</h2>
+                {% if game.is_completed %}<p class="text-3xl font-black text-emerald-400 mt-1">{{ game.home_score }}</p>{% endif %}
+            </div>
+            <div class="text-center">
+                <p class="text-slate-400 font-semibold">VS</p>
+                <p class="text-slate-500 text-sm">{{ game.date_time|date:"D, M d Y H:i" }}</p>
+                <p class="text-slate-500 text-sm">{{ game.location }}</p>
+            </div>
+            <div class="text-center md:text-left">
+                <h2 class="text-xl font-bold text-white">{{ game.away_team.name|default:"TBD" }}</h2>
+                {% if game.is_completed %}<p class="text-3xl font-black text-slate-300 mt-1">{{ game.away_score }}</p>{% endif %}
+            </div>
+        </div>
+
+        {% if game.is_live and not game.is_completed %}
+        <div class="mt-4 flex items-center justify-center gap-6 text-xs text-slate-400">
+            <span>Inning: {{ game.current_inning }}{% if game.is_top_inning %} Top{% else %} Bottom{% endif %}</span>
+            <span>Outs: {{ game.outs }}</span>
+            <span>Balls: {{ game.balls }}</span>
+            <span>Strikes: {{ game.strikes }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Lineups -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {% include "competition/_team_lineup.html" with team=game.home_team field_entries=home_field bench_entries=home_bench form=home_form side="Home" team_id=game.home_team.id %}
+        {% if game.away_team %}
+        {% include "competition/_team_lineup.html" with team=game.away_team field_entries=away_field bench_entries=away_bench form=away_form side="Away" team_id=game.away_team.id %}
+        {% endif %}
+    </div>
+
+    <!-- Score Entry -->
+    {% if score_form and can_score %}
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 mt-6">
+        <h2 class="text-lg font-bold text-white mb-4">Record Final Score</h2>
+        <form method="POST" class="max-w-md space-y-4">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_score">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-1.5">{{ game.home_team.name }}</label>
+                    <input type="number" name="home_score" min="0"
+                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-1.5">{{ game.away_team.name }}</label>
+                    <input type="number" name="away_score" min="0"
+                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+            </div>
+            <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-6 rounded-lg transition text-sm"
+                    onclick="return confirm('Mark game as completed with these scores?')">
+                Save Score &amp; Complete Game
+            </button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

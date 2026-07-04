@@ -1,0 +1,129 @@
+<div class="bg-slate-800 border border-slate-700 rounded-xl">
+    <div class="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-white">{{ team.name }}</h2>
+        <span class="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">{{ side }}</span>
+    </div>
+
+    <div class="p-5">
+        <!-- Field Players -->
+        {% if field_entries %}
+        <div class="mb-6">
+            <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Batting Order</h3>
+            <table class="w-full text-sm">
+                <thead class="text-slate-500 text-xs uppercase">
+                    <tr>
+                        <th class="text-left py-2 font-semibold w-10">#</th>
+                        <th class="text-left py-2 font-semibold">Player</th>
+                        <th class="text-left py-2 font-semibold w-20">Position</th>
+                        {% if can_score %}
+                        <th class="text-right py-2 font-semibold w-32">Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-700">
+                    {% for entry in field_entries %}
+                    <tr class="hover:bg-slate-700/30 transition">
+                        <td class="py-2.5 text-slate-400 font-mono">{{ entry.batting_order }}</td>
+                        <td class="py-2.5 text-white font-medium">{{ entry.player.first_name }} {{ entry.player.last_name }}</td>
+                        <td class="py-2.5">
+                            <span class="bg-emerald-500/10 text-emerald-300 text-xs font-bold px-2 py-0.5 rounded border border-emerald-500/20">{{ entry.position }}</span>
+                        </td>
+                        {% if can_score %}
+                        <td class="py-2.5 text-right">
+                            <button onclick="document.getElementById('edit-{{ entry.id }}').classList.toggle('hidden')"
+                                    class="text-amber-400 hover:text-amber-300 text-xs font-semibold mr-2">Edit</button>
+                            <form method="POST" class="inline" onsubmit="return confirm('Remove this player?')">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="delete_entry">
+                                <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                                <button type="submit" class="text-rose-400 hover:text-rose-300 text-xs font-semibold">Remove</button>
+                            </form>
+                            <form method="POST" id="edit-{{ entry.id }}" class="hidden mt-2 flex items-center gap-2">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="update_entry">
+                                <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                                <input type="number" name="batting_order" value="{{ entry.batting_order }}"
+                                       class="w-14 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs">
+                                <select name="position" class="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs">
+                                    <option value="">Bench</option>
+                                    {% for code, label in position_choices %}
+                                        {% if code %}
+                                        <option value="{{ code }}" {% if entry.position == code %}selected{% endif %}>{{ label }}</option>
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="text-emerald-400 hover:text-emerald-300 text-xs font-semibold">Save</button>
+                            </form>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- Bench -->
+        {% if bench_entries %}
+        <div class="mb-6">
+            <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Bench ({{ bench_entries|length }})</h3>
+            <div class="space-y-1.5">
+                {% for entry in bench_entries %}
+                <div class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="text-slate-500 font-mono text-sm">#{{ entry.batting_order }}</span>
+                        <span class="text-white text-sm font-medium">{{ entry.player.first_name }} {{ entry.player.last_name }}</span>
+                    </div>
+                    {% if can_score %}
+                    <div class="flex items-center gap-2">
+                        <button onclick="document.getElementById('bedit-{{ entry.id }}').classList.toggle('hidden')"
+                                class="text-amber-400 hover:text-amber-300 text-xs font-semibold">Edit</button>
+                        <form method="POST" class="inline" onsubmit="return confirm('Remove this player?')">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete_entry">
+                            <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                            <button type="submit" class="text-rose-400 hover:text-rose-300 text-xs font-semibold">Remove</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if not field_entries and not bench_entries %}
+        <div class="py-12 text-center">
+            <div class="text-4xl mb-3">&#x1f3d0;</div>
+            <p class="text-slate-400">{% if can_score %}Add players to build the lineup.{% else %}No lineup entries yet.{% endif %}</p>
+        </div>
+        {% endif %}
+
+        <!-- Add Entry -->
+        {% if form and can_score %}
+        <div class="border-t border-slate-700 pt-5 mt-4">
+            <h3 class="text-base font-semibold text-white mb-4">Add Player to Lineup</h3>
+            <form method="POST" class="space-y-4 max-w-lg">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_entry">
+                <input type="hidden" name="team_id" value="{{ team_id }}">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-1.5">{{ form.player.label }}</label>
+                    {{ form.player }}
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-300 mb-1.5">{{ form.batting_order.label }}</label>
+                        {{ form.batting_order }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-300 mb-1.5">{{ form.position.label }}</label>
+                        {{ form.position }}
+                    </div>
+                </div>
+                <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-6 rounded-lg transition text-sm">Add to Lineup</button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>

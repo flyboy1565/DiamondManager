@@ -3,21 +3,23 @@
 {% block title %}Add Coach - DiamondManager{% endblock %}
 
 {% block content %}
-<div class="w-full max-w-2xl">
-  <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-xl">
-    <h1 class="text-2xl font-bold text-white mb-4">Add Coach to {{ team.name }}</h1>
-    <form method="POST" class="space-y-4">
-      {% csrf_token %}
-      <div>
-        <label class="block text-sm font-semibold text-slate-300 mb-2">User</label>
-        {{ form.user }}
-      </div>
-      <div>
-        <label class="block text-sm font-semibold text-slate-300 mb-2">Role</label>
-        {{ form.role }}
-      </div>
-      <button type="submit" class="bg-emerald-600 text-white px-4 py-2 rounded">Add Coach</button>
-    </form>
-  </div>
+<div class="max-w-2xl mx-auto">
+    <h1 class="text-2xl font-bold text-white mb-2">Add Coach</h1>
+    <p class="text-slate-400 mb-6">Add a coach to {{ team.name }}.</p>
+
+    <div class="bg-slate-800 border border-slate-700 rounded-lg p-6">
+        <form method="POST" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-1.5">User</label>
+                {{ form.user }}
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Role</label>
+                {{ form.role }}
+            </div>
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-lg transition">Add Coach</button>
+        </form>
+    </div>
 </div>
 {% endblock %}

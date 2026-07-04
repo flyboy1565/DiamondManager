@@ -1,4 +1,5 @@
 from django import forms
+from django.apps import apps
 from django.contrib.auth.models import User
 from .models import TeamEvent
 from leagues.models import Team, Division, Organization
@@ -75,6 +76,49 @@ class TeamEventForm(forms.ModelForm):
             cleaned_data['tournament_division'] = None
         
         return cleaned_data
+
+
+DEFENSIVE_POSITION_CHOICES = [
+    ('', 'Bench (no position)'),
+    ('P', 'Pitcher'), ('C', 'Catcher'), ('1B', 'First Base'), ('2B', 'Second Base'),
+    ('3B', 'Third Base'), ('SS', 'Shortstop'), ('LF', 'Left Field'), ('CF', 'Center Field'),
+    ('RF', 'Right Field'), ('DH', 'Designated Hitter'), ('UTL', 'Utility'),
+]
+
+
+class LineupEntryForm(forms.Form):
+    player = forms.ModelChoiceField(
+        queryset=apps.get_model('profiles', 'Player').objects.none(),
+        widget=forms.Select(attrs={'class': 'w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500'}),
+        label="Player"
+    )
+    batting_order = forms.IntegerField(
+        min_value=1, max_value=30,
+        widget=forms.NumberInput(attrs={'class': 'w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500', 'placeholder': 'Batting order'}),
+        label="Batting Order"
+    )
+    position = forms.ChoiceField(
+        choices=DEFENSIVE_POSITION_CHOICES,
+        widget=forms.Select(attrs={'class': 'w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500'}),
+        required=False,
+        label="Position"
+    )
+
+    def __init__(self, *args, team=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if team:
+            from profiles.models import PlayerMembership
+            player_ids = PlayerMembership.objects.filter(team=team, is_active=True).values_list('player_id', flat=True)
+            self.fields['player'].queryset = apps.get_model('profiles', 'Player').objects.filter(id__in=player_ids)
+            self.fields['player'].label_from_instance = lambda p: f"{p.first_name} {p.last_name}"
+            # If division has allowed_positions, restrict choices
+            try:
+                allowed = team.division.allowed_positions
+                if allowed:
+                    choices = [('', 'Bench (no position)')] + [(p, p) for p in allowed]
+                    self.fields['position'].choices = choices
+            except Exception:
+                pass
 
 
 class GameScoreForm(forms.Form):

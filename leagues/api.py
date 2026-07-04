@@ -89,11 +89,16 @@ def list_org_divisions(request, org_id: UUID):
 def list_season_divisions(request, season_id: UUID):
     return Division.objects.filter(season_id=season_id)
 
+DEFAULT_POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "UTL"]
+
 @router.post("/divisions", response={201: schemas.DivisionSchema, 403: dict})
 def create_division(request, data: schemas.DivisionCreateSchema):
     if request.auth.profile.role not in ["ORG_OWNER", "ORG_ADMIN"]:
         return 403, {"message": "Insufficient permissions to manage divisions."}
-    division = Division.objects.create(**data.dict())
+    kwargs = data.dict(exclude_unset=True)
+    if "allowed_positions" not in kwargs or not kwargs["allowed_positions"]:
+        kwargs["allowed_positions"] = DEFAULT_POSITIONS
+    division = Division.objects.create(**kwargs)
     return 201, division
 
 @router.post("/seasons/clone-divisions", response={200: List[schemas.DivisionSchema], 403: dict, 400: dict})
@@ -126,8 +131,6 @@ def clone_divisions(request, payload: schemas.CloneDivisionsSchema):
 
 
 # --- DIVISION POSITIONS ---
-DEFAULT_POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "UTL"]
-
 @router.get("/divisions/{division_id}/positions", response=List[str])
 def get_division_positions(request, division_id: int):
     division = get_object_or_404(Division, id=division_id)
