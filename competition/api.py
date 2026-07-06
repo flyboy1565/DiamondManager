@@ -214,6 +214,15 @@ _PITCH_LABELS = {
     'out': 'Out', 'out_ground': 'Ground out', 'out_fly': 'Fly out',
     'out_line': 'Line out', 'out_pop': 'Pop out', 'strikeout': 'Strikeout',
     'hit': 'Hit', 'double_play': 'Double Play', 'pickoff': 'Pick Off',
+    # New types
+    'steal': 'Stolen Base', 'caught_stealing': 'Caught Stealing',
+    'hit_by_pitch': 'Hit By Pitch',
+    'sac_bunt': 'Sacrifice Bunt', 'sac_fly': 'Sacrifice Fly',
+    'error': 'Error', 'fielders_choice': "Fielder's Choice",
+    'wild_pitch': 'Wild Pitch', 'passed_ball': 'Passed Ball',
+    'balk': 'Balk', 'dropped_third_strike': 'Dropped 3rd Strike',
+    'infield_fly': 'Infield Fly', 'triple_play': 'Triple Play',
+    'bunt': 'Bunt', 'bunt_foul': 'Foul Bunt',
 }
 
 
@@ -244,7 +253,293 @@ def _make_pitch_description(game, pitch_type, runs_scored, movements, was_at_bat
         return f"{label} ({count_str})"
 
 
-def _apply_record_pitch(game, pitch_type):
+def _infield_fly_applies(game):
+    """Check if infield fly rule is in effect: < 2 outs, runners on 1st AND 2nd (or bases loaded)."""
+    if game.outs >= 2:
+        return False
+    runners = _get_runners(game)
+    return runners.get('first') and runners.get('second')
+
+
+def _handle_steal(game, runner_base, success=True, caught_base=None):
+    """
+    Handle a steal attempt.
+    runner_base: which base the runner is on ('first', 'second', 'third')
+    success: True for successful steal, False for caught stealing
+    caught_base: if caught, which base they were out at (usually the next one)
+    Returns (runs_scored, movements, side_retired).
+    """
+    runners = _get_runners(game)
+    base_order = {'first': 1, 'second': 2, 'third': 3}
+    target_map = {1: 'first', 2: 'second', 3: 'third'}
+    movements = []
+    runs_scored = 0
+    side_retired = False
+
+    if not runners.get(runner_base):
+        return 0, ["No runner on base"], False
+
+    info = runners[runner_base]
+    base_num = base_order[runner_base]
+    target_num = base_num + 1
+
+    if success:
+        if target_num >= 4:
+            runs_scored = 1
+            runners[runner_base] = None
+            movements.append(f"{info['player_name']} steals home — scores!")
+        else:
+            target_base = target_map[target_num]
+            if runners.get(target_base):
+                movements.append(f"{info['player_name']} holds at {runner_base}")
+            else:
+                runners[runner_base] = None
+                runners[target_base] = info
+                movements.append(f"{info['player_name']} steals {target_base}")
+        game.scoring_data['runners'] = runners
+    else:
+        # Caught stealing
+        out_base = caught_base or target_map.get(target_num, runner_base)
+        runners[runner_base] = None
+        game.outs += 1
+        movements.append(f"{info['player_name']} caught stealing {out_base}")
+        if game.outs >= 3:
+            _clear_runners(game)
+            _advance_inning(game)
+            movements.append("Side retired")
+            side_retired = True
+
+    return runs_scored, movements, side_retired
+
+
+def _handle_hit_by_pitch(game, current_batter):
+    """Batter hit by pitch. Goes to 1st, force runners. No count change, no AB."""
+    movements = []
+    runs_scored = 0
+    runners = _get_runners(game)
+    batter_name = current_batter.get('player_name', 'Batter')
+    batter_id = current_batter.get('player_id')
+
+    movements.append(f"{batter_name} hit by pitch")
+    new_first = _make_runner_info(batter_id, batter_name)
+
+    # Force advancement
+    old_first = runners.get('first')
+    old_second = runners.get('second')
+    old_third = runners.get('third')
+
+    # Third forced home if bases loaded
+    if old_third and old_second and old_first:
+        runs_scored = 1
+        movements.append(f"{old_third['player_name']} forced home")
+        runners['third'] = old_second
+        runners['second'] = old_first
+        runners['first'] = new_first
+    elif old_second and old_first:
+        runners['third'] = old_second
+        runners['second'] = old_first
+        runners['first'] = new_first
+        movements.append(f"{old_second['player_name']} forced to third")
+        movements.append(f"{old_first['player_name']} forced to second")
+    elif old_first:
+        runners['second'] = old_first
+        runners['first'] = new_first
+        movements.append(f"{old_first['player_name']} forced to second")
+    else:
+        runners['first'] = new_first
+
+    game.scoring_data['runners'] = runners
+    return runs_scored, movements
+
+
+def _handle_sacrifice(game, current_batter, sac_type='bunt'):
+    """
+    Handle sacrifice bunt or fly. Batter is out, runners advance.
+    sac_type: 'bunt' or 'fly'
+    Returns (runs_scored, movements, side_retired).
+    """
+    movements = []
+    runs_scored = 0
+    runners = _get_runners(game)
+    batter_name = current_batter.get('player_name', 'Batter')
+    side_retired = False
+
+    game.outs += 1
+    label = "Sacrifice bunt" if sac_type == 'bunt' else "Sacrifice fly"
+    movements.append(f"{batter_name} — {label}")
+
+    if sac_type == 'bunt':
+        if runners.get('second') and not runners.get('third'):
+            runners['third'] = runners['second']
+            runners['second'] = None
+            movements.append(f"{runners['third']['player_name']} to third")
+        if runners.get('first') and not runners.get('second'):
+            runners['second'] = runners['first']
+            runners['first'] = None
+            movements.append(f"{runners['second']['player_name']} to second")
+    elif sac_type == 'fly':
+        if runners.get('third'):
+            runs_scored = 1
+            movements.append(f"{runners['third']['player_name']} scores")
+            runners['third'] = None
+
+    game.scoring_data['runners'] = runners
+
+    if game.outs >= 3:
+        _clear_runners(game)
+        _advance_inning(game)
+        movements.append("Side retired")
+        side_retired = True
+
+    return runs_scored, movements, side_retired
+
+
+def _handle_error(game, current_batter):
+    """
+    Batter reaches safely on an error. No AB charged, no hit.
+    Runners may advance one base.
+    Returns (runs_scored, movements).
+    """
+    movements = []
+    runs_scored = 0
+    runners = _get_runners(game)
+    batter_name = current_batter.get('player_name', 'Batter')
+    batter_id = current_batter.get('player_id')
+
+    movements.append(f"{batter_name} reaches on error")
+
+    new_batter = _make_runner_info(batter_id, batter_name)
+    old_first = runners.get('first')
+    old_second = runners.get('second')
+    old_third = runners.get('third')
+
+    if old_first:
+        if old_second:
+            if old_third:
+                runs_scored = 1
+                movements.append(f"{old_third['player_name']} scores")
+            else:
+                runners['third'] = old_second
+            runners['second'] = old_first
+        else:
+            runners['second'] = old_first
+    runners['first'] = new_batter
+
+    game.scoring_data['runners'] = runners
+    return runs_scored, movements
+
+
+def _handle_wild_or_passed_ball(game, is_passed_ball=False):
+    """
+    Handle wild pitch or passed ball — all runners advance one base.
+    No batter effect.
+    Returns (runs_scored, movements).
+    """
+    movements = []
+    runs_scored = 0
+    runners = _get_runners(game)
+    label = "Passed ball" if is_passed_ball else "Wild pitch"
+
+    if runners.get('third'):
+        runs_scored += 1
+        movements.append(f"{runners['third']['player_name']} scores on {label}")
+        runners['third'] = None
+    if runners.get('second'):
+        if not runners.get('third'):
+            runners['third'] = runners['second']
+            runners['second'] = None
+            movements.append(f"{runners['third']['player_name']} to third on {label}")
+    if runners.get('first'):
+        if not runners.get('second'):
+            runners['second'] = runners['first']
+            runners['first'] = None
+            movements.append(f"{runners['second']['player_name']} to second on {label}")
+
+    game.scoring_data['runners'] = runners
+    return runs_scored, movements
+
+
+def _handle_balk(game):
+    """
+    Balk — all runners advance one base. Batter unaffected.
+    Returns (runs_scored, movements).
+    """
+    movements = []
+    runs_scored = 0
+    runners = _get_runners(game)
+
+    movements.append("Balk")
+
+    if runners.get('third'):
+        runs_scored += 1
+        movements.append(f"{runners['third']['player_name']} scores on balk")
+        runners['third'] = None
+    if runners.get('second'):
+        if not runners.get('third'):
+            runners['third'] = runners['second']
+            movements.append(f"{runners['second']['player_name']} advances on balk")
+        runners['second'] = None
+    if runners.get('first'):
+        if not runners.get('second'):
+            runners['second'] = runners['first']
+            movements.append(f"{runners['first']['player_name']} advances on balk")
+        runners['first'] = None
+
+    game.scoring_data['runners'] = runners
+    return runs_scored, movements
+
+
+def _handle_dropped_third_strike(game, current_batter):
+    """
+    Dropped 3rd strike — batter can attempt to reach 1st safely.
+    Only applies if 1st base is unoccupied OR there are 2 outs.
+    Returns (runs_scored, movements, batter_safe, side_retired).
+    """
+    movements = []
+    runs_scored = 0
+    runners = _get_runners(game)
+    batter_name = current_batter.get('player_name', 'Batter')
+    batter_id = current_batter.get('player_id')
+    side_retired = False
+
+    can_run = not runners.get('first') or game.outs >= 2
+    if can_run:
+        movement_text = f"{batter_name} reaches on dropped 3rd strike"
+        new_batter = _make_runner_info(batter_id, batter_name)
+        old_first = runners.get('first')
+        old_second = runners.get('second')
+        old_third = runners.get('third')
+
+        if old_third and old_second and old_first:
+            runs_scored = 1
+            movements.append(f"{old_third['player_name']} forced home")
+            runners['third'] = old_second
+            runners['second'] = old_first
+            runners['first'] = new_batter
+        elif old_second and old_first:
+            runners['third'] = old_second
+            runners['second'] = old_first
+            runners['first'] = new_batter
+        elif old_first:
+            runners['second'] = old_first
+            runners['first'] = new_batter
+        else:
+            runners['first'] = new_batter
+        movements.append(movement_text)
+        game.scoring_data['runners'] = runners
+        return runs_scored, movements, True, False  # batter safe
+    else:
+        game.outs += 1
+        movements.append(f"{batter_name} strikes out (dropped, thrown out)")
+        if game.outs >= 3:
+            _clear_runners(game)
+            _advance_inning(game)
+            movements.append("Side retired")
+            side_retired = True
+        return 0, movements, False, side_retired  # batter out
+
+
+def _apply_record_pitch(game, pitch_type, extra=None):
     # Capture state before any mutations (pitch happened in this inning)
     recorded_inning = game.current_inning
     recorded_is_top = game.is_top_inning
@@ -333,26 +628,43 @@ def _apply_record_pitch(game, pitch_type):
         else:
             _advance_batter(game, side)
 
-    # Double play — batter out + lead runner out
-    elif pitch_type == 'double_play':
+    # Double play / Triple play — batter out + lead runner(s) out
+    elif pitch_type in ('double_play', 'triple_play'):
         was_at_bat_end = True
+        extra = extra or {}
         batter_name = current_batter.get('player_name', 'Batter')
         runners = _get_runners(game)
-        # Remove the lead runner (furthest advanced base)
-        lead_base = None
-        for b in ('third', 'second', 'first'):
-            if runners[b]:
-                lead_base = b
-                break
-        if lead_base:
-            lead_name = runners[lead_base]['player_name']
-            runners[lead_base] = None
-            movements.append(f"{lead_name} out on the double play")
-            game.outs += 1  # lead runner out
-        # Batter is also out (second out)
-        game.outs += 1
+        label = 'Triple Play' if pitch_type == 'triple_play' else 'Double Play'
+        outs_to_record = 3 if pitch_type == 'triple_play' else 2
+
+        # If extra specifies which runners/outs, use that
+        outs_recorded = extra.get('outs', [])
+        if outs_recorded:
+            for out_info in outs_recorded[:outs_to_record]:
+                out_base = out_info.get('base')
+                out_player = out_info.get('player_name', '')
+                if out_base == 'batter':
+                    movements.append(f"{out_player} — {label}")
+                else:
+                    movements.append(f"{out_player} out at {out_base}")
+                    if runners.get(out_base):
+                        runners[out_base] = None
+                game.outs += 1
+        else:
+            # Default: remove lead runner(s) + batter
+            for _ in range(outs_to_record - 1):
+                for b in ('third', 'second', 'first'):
+                    if runners[b]:
+                        lead_name = runners[b]['player_name']
+                        runners[b] = None
+                        movements.append(f"{lead_name} out on the {label}")
+                        game.outs += 1
+                        break
+            # Batter is also out
+            game.outs += 1 if outs_to_record == 3 else 1
+            movements.append(f"{batter_name} — {label}")
+
         _reset_count(game)
-        movements.append(f"{batter_name} — Double Play")
         if game.outs >= 3:
             _clear_runners(game)
             _advance_inning(game)
@@ -360,17 +672,19 @@ def _apply_record_pitch(game, pitch_type):
         else:
             _advance_batter(game, side)
 
-    # Pick off — pitcher catches a runner off base
+    # Pick off — pitcher catches a runner off base (with runner selection)
     elif pitch_type == 'pickoff':
-        was_at_bat_end = False  # batter not involved
+        was_at_bat_end = False
+        extra = extra or {}
         runners = _get_runners(game)
-        # Pick off the runner on the furthest base (closest to home)
-        picked_base = None
-        for b in ('third', 'second', 'first'):
-            if runners[b]:
-                picked_base = b
-                break
-        if picked_base:
+        # Use specified runner base, or default to furthest
+        picked_base = extra.get('runner_base')
+        if not picked_base:
+            for b in ('third', 'second', 'first'):
+                if runners[b]:
+                    picked_base = b
+                    break
+        if picked_base and runners.get(picked_base):
             picked_name = runners[picked_base]['player_name']
             runners[picked_base] = None
             game.outs += 1
@@ -379,10 +693,235 @@ def _apply_record_pitch(game, pitch_type):
                 _clear_runners(game)
                 _advance_inning(game)
                 movements.append("Side retired")
-            else:
-                pass  # batter stays, count unchanged
         else:
             movements.append("Pick off attempt — no runners")
+
+    # Steal — successful stolen base
+    elif pitch_type == 'steal':
+        was_at_bat_end = False
+        extra = extra or {}
+        runner_base = extra.get('runner_base', 'first')
+        runs, mov, _ = _handle_steal(game, runner_base, success=True)
+        runs_scored += runs
+        movements.extend(mov)
+        if runs_scored and scoring_side == 'home':
+            game.home_score += runs_scored
+        elif runs_scored:
+            game.away_score += runs_scored
+
+    # Caught stealing
+    elif pitch_type == 'caught_stealing':
+        was_at_bat_end = False
+        extra = extra or {}
+        runner_base = extra.get('runner_base', 'first')
+        caught_base = extra.get('caught_base')
+        runs, mov, side_retired = _handle_steal(game, runner_base, success=False, caught_base=caught_base)
+        runs_scored += runs
+        movements.extend(mov)
+
+    # Hit by pitch
+    elif pitch_type == 'hit_by_pitch':
+        was_at_bat_end = True
+        _reset_count(game)
+        runs, mov = _handle_hit_by_pitch(game, current_batter)
+        runs_scored += runs
+        movements.extend(mov)
+        if runs_scored:
+            if scoring_side == 'home':
+                game.home_score += runs_scored
+            else:
+                game.away_score += runs_scored
+        _advance_batter(game, side)
+
+    # Sacrifice bunt
+    elif pitch_type == 'sac_bunt':
+        was_at_bat_end = True
+        _reset_count(game)
+        runs, mov, side_retired = _handle_sacrifice(game, current_batter, sac_type='bunt')
+        runs_scored += runs
+        movements.extend(mov)
+        if runs_scored:
+            if scoring_side == 'home':
+                game.home_score += runs_scored
+            else:
+                game.away_score += runs_scored
+        if not side_retired:
+            _advance_batter(game, side)
+
+    # Sacrifice fly
+    elif pitch_type == 'sac_fly':
+        was_at_bat_end = True
+        _reset_count(game)
+        runs, mov, side_retired = _handle_sacrifice(game, current_batter, sac_type='fly')
+        runs_scored += runs
+        movements.extend(mov)
+        if runs_scored:
+            if scoring_side == 'home':
+                game.home_score += runs_scored
+            else:
+                game.away_score += runs_scored
+        if not side_retired:
+            _advance_batter(game, side)
+
+    # Error — batter safe, no AB
+    elif pitch_type == 'error':
+        was_at_bat_end = True
+        _reset_count(game)
+        runs, mov = _handle_error(game, current_batter)
+        runs_scored += runs
+        movements.extend(mov)
+        if runs_scored:
+            if scoring_side == 'home':
+                game.home_score += runs_scored
+            else:
+                game.away_score += runs_scored
+        _advance_batter(game, side)
+
+    # Fielder's choice — lead runner out, batter safe
+    elif pitch_type == 'fielders_choice':
+        was_at_bat_end = True
+        _reset_count(game)
+        runners = _get_runners(game)
+        fc_runner_base = extra.get('runner_base') if extra else None
+        movements.append(f"{current_batter.get('player_name', 'Batter')} reaches on fielder's choice")
+        # Lead runner out
+        if fc_runner_base and runners.get(fc_runner_base):
+            out_name = runners[fc_runner_base]['player_name']
+            runners[fc_runner_base] = None
+            game.outs += 1
+            movements.append(f"{out_name} out on fielder's choice")
+        else:
+            # Default: put out the lead runner
+            for b in ('third', 'second', 'first'):
+                if runners[b]:
+                    out_name = runners[b]['player_name']
+                    runners[b] = None
+                    game.outs += 1
+                    movements.append(f"{out_name} out on fielder's choice")
+                    break
+        # Batter safe at 1st
+        batter_info = _make_runner_info(
+            current_batter.get('player_id'),
+            current_batter.get('player_name')
+        )
+        if runners.get('first'):
+            # Force advance remaining runners
+            old_first = runners['first']
+            old_second = runners.get('second')
+            if old_second:
+                runners['third'] = runners.get('third') or old_second
+            runners['second'] = old_first
+        runners['first'] = batter_info
+        game.scoring_data['runners'] = runners
+        if game.outs >= 3:
+            _clear_runners(game)
+            _advance_inning(game)
+            movements.append("Side retired")
+        else:
+            _advance_batter(game, side)
+
+    # Wild pitch / Passed ball
+    elif pitch_type in ('wild_pitch', 'passed_ball'):
+        was_at_bat_end = False
+        is_pb = (pitch_type == 'passed_ball')
+        runs, mov = _handle_wild_or_passed_ball(game, is_passed_ball=is_pb)
+        runs_scored += runs
+        movements.extend(mov)
+        if runs_scored:
+            if scoring_side == 'home':
+                game.home_score += runs_scored
+            else:
+                game.away_score += runs_scored
+
+    # Balk
+    elif pitch_type == 'balk':
+        was_at_bat_end = False
+        runs, mov = _handle_balk(game)
+        runs_scored += runs
+        movements.extend(mov)
+        if runs_scored:
+            if scoring_side == 'home':
+                game.home_score += runs_scored
+            else:
+                game.away_score += runs_scored
+
+    # Dropped 3rd strike
+    elif pitch_type == 'dropped_third_strike':
+        was_at_bat_end = True
+        game.strikes = 0
+        game.balls = 0
+        runs, mov, batter_safe, side_retired = _handle_dropped_third_strike(game, current_batter)
+        runs_scored += runs
+        movements.extend(mov)
+        if runs_scored:
+            if scoring_side == 'home':
+                game.home_score += runs_scored
+            else:
+                game.away_score += runs_scored
+        if not side_retired:
+            _advance_batter(game, side)
+        elif not batter_safe and game.outs < 3:
+            _advance_batter(game, side)
+
+    # Infield fly — automatic out, runners hold (but may advance at own risk)
+    elif pitch_type == 'infield_fly':
+        was_at_bat_end = True
+        game.outs += 1
+        _reset_count(game)
+        batter_name = current_batter.get('player_name', 'Batter')
+        movements.append(f"{batter_name} — Infield Fly (automatic out)")
+        if game.outs >= 3:
+            _clear_runners(game)
+            _advance_inning(game)
+            movements.append("Side retired")
+        else:
+            _advance_batter(game, side)
+
+    # Bunt (regular, not sacrifice — batter attempts to bunt for a hit)
+    elif pitch_type == 'bunt':
+        was_at_bat_end = True
+        extras = extra or {}
+        result = extras.get('bunt_result', 'out_ground')
+        if result in ('single',):
+            # Bunt single
+            game.balls = 0
+            game.strikes = 0
+            runs, mov = _advance_runners_on_hit(game, 1, current_batter)
+            runs_scored += runs
+            movements.extend(mov)
+            movements.append(f"{current_batter.get('player_name', 'Batter')} bunt single")
+            if runs_scored:
+                if scoring_side == 'home':
+                    game.home_score += runs_scored
+                else:
+                    game.away_score += runs_scored
+            _advance_batter(game, side)
+        else:
+            # Bunt out
+            game.outs += 1
+            _reset_count(game)
+            movements.append(f"{current_batter.get('player_name', 'Batter')} bunt out")
+            if game.outs >= 3:
+                _clear_runners(game)
+                _advance_inning(game)
+                movements.append("Side retired")
+            else:
+                _advance_batter(game, side)
+
+    # Foul bunt with 2 strikes = strikeout
+    elif pitch_type == 'bunt_foul':
+        game.strikes += 1
+        if game.strikes >= 3:
+            was_at_bat_end = True
+            game.outs += 1
+            _reset_count(game)
+            movements.append(f"{current_batter.get('player_name', 'Batter')} strikes out (foul bunt)")
+            if game.outs >= 3:
+                _clear_runners(game)
+                _advance_inning(game)
+                movements.append("Side retired")
+            else:
+                _advance_batter(game, side)
 
     game.pitch_count += 1
     description = _make_pitch_description(game, pitch_type, runs_scored, movements, was_at_bat_end)
@@ -408,6 +947,7 @@ def _apply_record_pitch(game, pitch_type):
         'runs_scored': runs_scored,
         'was_at_bat_end': was_at_bat_end,
         'timestamp': timezone.now().isoformat(),
+        'extra': extra or {},
     }
     game.scoring_data.setdefault('pitches', []).append(pitch_record)
 
@@ -452,6 +992,7 @@ def compute_game_stats(game):
                 batters[batter_id] = {
                     'name': batter.get('player_name', 'Unknown'),
                     'ab': 0, 'hits': 0, 'strikeouts': 0, 'walks': 0, 'pitches_seen': 0,
+                    'hbp': 0, 'sac': 0, 'error': 0, 'fc': 0, 'sb': 0, 'cs': 0,
                 }
             batters[batter_id]['pitches_seen'] += 1
 
@@ -464,8 +1005,28 @@ def compute_game_stats(game):
                     batters[batter_id]['strikeouts'] += 1
             elif result == 'hit':
                 batters[batter_id]['ab'] += 1
-            elif result == 'double_play':
+            elif result in ('double_play', 'triple_play'):
                 batters[batter_id]['ab'] += 1
+            elif result == 'infield_fly':
+                batters[batter_id]['ab'] += 1
+            elif result == 'fielders_choice':
+                batters[batter_id]['ab'] += 1  # FC counts as AB, no hit
+            elif result == 'error':
+                batters[batter_id]['error'] += 1  # No AB charged
+            elif result in ('sac_bunt', 'sac_fly'):
+                batters[batter_id]['sac'] += 1  # No AB charged
+            elif result == 'hit_by_pitch':
+                batters[batter_id]['hbp'] += 1  # No AB charged
+            elif result == 'bunt':
+                batter_bunt_result = pitch.get('extra', {}).get('bunt_result', 'out_ground')
+                if batter_bunt_result == 'single':
+                    batters[batter_id]['hits'] += 1
+                    batters[batter_id]['ab'] += 1
+                else:
+                    batters[batter_id]['ab'] += 1
+            elif result == 'dropped_third_strike':
+                batters[batter_id]['ab'] += 0  # No AB on dropped 3rd strike
+                batters[batter_id]['strikeouts'] += 1  # Still a K in the books
             elif 'ball' in result and b_balls == 3:
                 batters[batter_id]['walks'] += 1
 
@@ -477,14 +1038,23 @@ def compute_game_stats(game):
                 pitchers[pitcher_id] = {
                     'name': pitcher.get('player_name', 'Unknown'),
                     'pitch_count': 0, 'strikeouts': 0, 'hits_allowed': 0, 'walks_allowed': 0,
+                    'hbp': 0, 'wp': 0, 'bk': 0, 'sb_allowed': 0, 'cs': 0,
                 }
             pitchers[pitcher_id]['pitch_count'] += 1
             if result in ('single', 'double', 'triple', 'homerun'):
                 pitchers[pitcher_id]['hits_allowed'] += 1
             elif result == 'strikeout':
                 pitchers[pitcher_id]['strikeouts'] += 1
-            elif result == 'pickoff':
-                pass  # pickoffs count as pitches but no stat change
+            elif result in ('pickoff', 'caught_stealing'):
+                pitchers[pitcher_id]['cs'] += 1
+            elif result == 'hit_by_pitch':
+                pitchers[pitcher_id]['hbp'] += 1
+            elif result == 'wild_pitch':
+                pitchers[pitcher_id]['wp'] += 1
+            elif result == 'balk':
+                pitchers[pitcher_id]['bk'] += 1
+            elif result == 'steal':
+                pitchers[pitcher_id]['sb_allowed'] += 1
             elif 'ball' in result and b_balls == 3:
                 pitchers[pitcher_id]['walks_allowed'] += 1
 

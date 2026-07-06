@@ -29,27 +29,30 @@
         <!-- Pitcher's mound -->
         <circle cx="120" cy="130" r="8" fill="var(--slate-600)" stroke="var(--slate-500)" stroke-width="1"/>
 
-        <!-- Runner on 2nd -->
+        <!-- Runner on 2nd (clickable) -->
         {% if runners.second %}
-        <g>
-            <circle cx="120" cy="55" r="11" fill="var(--slate-900)" stroke="#fbbf24" stroke-width="2.5"/>
+        <g class="runner-svg" data-base="second" style="cursor:pointer">
+            <circle cx="120" cy="55" r="12" fill="var(--slate-900)" stroke="#fbbf24" stroke-width="2.5" class="runner-ring"/>
             <text x="120" y="59" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="bold">{{ runners.second.player_name|make_list|first }}</text>
+            <title>{{ runners.second.player_name }} — click for steal/pickoff options</title>
         </g>
         {% endif %}
 
-        <!-- Runner on 1st -->
+        <!-- Runner on 1st (clickable) -->
         {% if runners.first %}
-        <g>
-            <circle cx="195" cy="130" r="11" fill="var(--slate-900)" stroke="#fbbf24" stroke-width="2.5"/>
+        <g class="runner-svg" data-base="first" style="cursor:pointer">
+            <circle cx="195" cy="130" r="12" fill="var(--slate-900)" stroke="#fbbf24" stroke-width="2.5" class="runner-ring"/>
             <text x="195" y="134" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="bold">{{ runners.first.player_name|make_list|first }}</text>
+            <title>{{ runners.first.player_name }} — click for steal/pickoff options</title>
         </g>
         {% endif %}
 
-        <!-- Runner on 3rd -->
+        <!-- Runner on 3rd (clickable) -->
         {% if runners.third %}
-        <g>
-            <circle cx="45" cy="130" r="11" fill="var(--slate-900)" stroke="#fbbf24" stroke-width="2.5"/>
+        <g class="runner-svg" data-base="third" style="cursor:pointer">
+            <circle cx="45" cy="130" r="12" fill="var(--slate-900)" stroke="#fbbf24" stroke-width="2.5" class="runner-ring"/>
             <text x="45" y="134" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="bold">{{ runners.third.player_name|make_list|first }}</text>
+            <title>{{ runners.third.player_name }} — click for steal/pickoff options</title>
         </g>
         {% endif %}
 
@@ -59,4 +62,29 @@
         <text x="120" y="252" text-anchor="middle" fill="var(--slate-300)" font-size="10" font-weight="bold">{{ current_batter.player_name }}</text>
         {% endif %}
     </svg>
+
+    <!-- Runner action legend -->
+    <div class="hidden sm:block text-xs text-[var(--slate-500)] ml-2 self-end mb-2">
+        <p>Click runner → steal/pickoff</p>
+    </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.runner-svg').forEach(function(el) {
+        el.addEventListener('click', function(e) {
+            const base = this.dataset.base;
+            const modal = document.getElementById('runner-modal');
+            if (!modal) return;
+            const baseSelect = document.getElementById('runner-modal-base');
+            if (baseSelect) {
+                baseSelect.value = base;
+            }
+            // Default to steal modal
+            if (typeof openRunnerModal === 'function') {
+                openRunnerModal('steal');
+            }
+        });
+    });
+});
+</script>

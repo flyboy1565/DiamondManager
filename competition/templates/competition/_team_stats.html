@@ -46,6 +46,8 @@
                         <th class="pb-2 px-3 text-center">H</th>
                         <th class="pb-2 px-3 text-center">SO</th>
                         <th class="pb-2 px-3 text-center">BB</th>
+                        <th class="pb-2 px-3 text-center">HBP</th>
+                        <th class="pb-2 px-3 text-center">SAC</th>
                         <th class="pb-2 px-3 text-center">AVG</th>
                     </tr>
                 </thead>
@@ -57,6 +59,8 @@
                         <td class="py-2 px-3 text-center">{{ b.hits }}</td>
                         <td class="py-2 px-3 text-center">{{ b.strikeouts }}</td>
                         <td class="py-2 px-3 text-center">{{ b.walks }}</td>
+                        <td class="py-2 px-3 text-center">{{ b.hbp|default:"0" }}</td>
+                        <td class="py-2 px-3 text-center">{{ b.sac|default:"0" }}</td>
                         <td class="py-2 px-3 text-center">{{ b.avg }}</td>
                     </tr>
                     {% endfor %}
@@ -81,6 +85,9 @@
                         <th class="pb-2 px-3 text-center">SO</th>
                         <th class="pb-2 px-3 text-center">H</th>
                         <th class="pb-2 px-3 text-center">BB</th>
+                        <th class="pb-2 px-3 text-center">HBP</th>
+                        <th class="pb-2 px-3 text-center">WP</th>
+                        <th class="pb-2 px-3 text-center">BK</th>
                     </tr>
                 </thead>
                 <tbody class="text-[var(--slate-300)]">
@@ -91,6 +98,9 @@
                         <td class="py-2 px-3 text-center">{{ p.strikeouts }}</td>
                         <td class="py-2 px-3 text-center">{{ p.hits_allowed }}</td>
                         <td class="py-2 px-3 text-center">{{ p.walks_allowed }}</td>
+                        <td class="py-2 px-3 text-center">{{ p.hbp|default:"0" }}</td>
+                        <td class="py-2 px-3 text-center">{{ p.wp|default:"0" }}</td>
+                        <td class="py-2 px-3 text-center">{{ p.bk|default:"0" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

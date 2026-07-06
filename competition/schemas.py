@@ -62,7 +62,8 @@ class SetBatterSchema(Schema):
 
 
 class RecordPitchSchema(Schema):
-    type: str  # "ball", "strike", "foul", "hit"
+    type: str  # All pitch types
+    extra: Optional[dict] = None  # Extra data for complex events (steal, DP, etc.)
 
 
 class GameCreateSchema(Schema):

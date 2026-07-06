@@ -3,7 +3,7 @@
 {% block title %}Live Scoring - {{ game.home_team }} vs {{ game.away_team }}{% endblock %}
 
 {% block content %}
-<div class="max-w-5xl mx-auto">
+<div class="max-w-6xl mx-auto">
     <!-- Back link + status -->
     <div class="flex items-center justify-between mb-4">
         <a href="{% url 'game_detail' game.id %}" class="text-[var(--slate-400)] hover:text-[var(--white)] transition text-sm">&larr; Back to Game Detail</a>
@@ -14,25 +14,42 @@
         {% endif %}
     </div>
 
-    <!-- Score header -->
+    <!-- Score + Inning header -->
     <div class="bg-gradient-to-r from-[var(--slate-800)] to-[var(--slate-900)] border border-[var(--slate-700)] rounded-xl p-5 mb-4">
         <div class="grid grid-cols-3 items-center gap-4">
-            <div class="text-center md:text-right">
-                <p class="text-xs text-[var(--slate-400)] font-semibold">{{ game.home_team.name }}</p>
+            <!-- Home team — highlighted when batting (bottom of inning) -->
+            <div class="text-center {% if not game.is_top_inning %}bg-emerald-900/30 rounded-lg py-2 ring-2 ring-emerald-500/40{% endif %}">
+                <p class="text-xs {% if not game.is_top_inning %}text-emerald-300{% else %}text-[var(--slate-400)]{% endif %} font-semibold">
+                    {{ game.home_team.name }}
+                    {% if not game.is_top_inning %}<span class="text-emerald-400 text-[10px] ml-1">&#9660; Bat</span>{% endif %}
+                </p>
                 <p class="text-4xl font-black text-emerald-400">{{ game.home_score }}</p>
             </div>
+            <!-- Center: Inning + Count + PC -->
             <div class="text-center">
-                <p class="text-xs text-[var(--slate-500)]">Inning {{ game.current_inning }}{% if game.is_top_inning %} &#8593; Top{% else %} &#8595; Bottom{% endif %}</p>
-                <p class="text-xs text-[var(--slate-500)] mt-1">{{ game.outs }} Out{% if game.outs != 1 %}s{% endif %}</p>
+                <p class="text-sm font-bold text-[var(--slate-200)]">
+                    {% if game.is_top_inning %}&#9650; Top{% else %}&#9660; Bot{% endif %}
+                    {{ game.current_inning }}
+                </p>
+                <div class="flex items-center justify-center gap-3 text-xs mt-1">
+                    <span class="text-[var(--slate-400)]">B <span class="text-amber-400 font-bold">{{ game.balls }}</span></span>
+                    <span class="text-[var(--slate-400)]">S <span class="text-red-400 font-bold">{{ game.strikes }}</span></span>
+                    <span class="text-[var(--slate-400)]">O <span class="font-bold text-[var(--white)]">{{ game.outs }}</span></span>
+                </div>
+                <p class="text-[10px] text-[var(--slate-500)] mt-1">PC: {{ game.pitch_count }}</p>
             </div>
-            <div class="text-center md:text-left">
-                <p class="text-xs text-[var(--slate-400)] font-semibold">{{ game.away_team.name }}</p>
+            <!-- Away team — highlighted when batting (top of inning) -->
+            <div class="text-center {% if game.is_top_inning %}bg-emerald-900/30 rounded-lg py-2 ring-2 ring-emerald-500/40{% endif %}">
+                <p class="text-xs {% if game.is_top_inning %}text-emerald-300{% else %}text-[var(--slate-400)]{% endif %} font-semibold">
+                    {{ game.away_team.name }}
+                    {% if game.is_top_inning %}<span class="text-emerald-400 text-[10px] ml-1">&#9650; Bat</span>{% endif %}
+                </p>
                 <p class="text-4xl font-black text-[var(--slate-300)]">{{ game.away_score }}</p>
             </div>
         </div>
     </div>
 
-    <!-- Main tabbed card -->
+    <!-- Main card -->
     <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-xl mb-4 overflow-hidden">
         <!-- Tab navigation -->
         <div class="flex border-b border-[var(--slate-700)]">
@@ -42,158 +59,115 @@
         </div>
 
         <!-- Tab: Live Scoring -->
-        <div id="panel-scoring" class="p-6">
-            <!-- Top bar: Mode toggle -->
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-lg font-bold text-[var(--white)]">Live Scoring</h2>
-                <div class="flex items-center gap-2">
-                    <span class="text-xs text-emerald-400" id="mode-label-simple">Simple</span>
-                    <button type="button" class="relative w-12 h-6 rounded-full bg-[var(--slate-600)] transition"
-                            onclick="toggleScoringMode()">
-                        <span id="mode-toggle-knob" class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition translate-x-0"></span>
-                    </button>
-                    <span class="text-xs text-[var(--slate-400)]" id="mode-label-complex">Complex</span>
-                </div>
-            </div>
-
-            <!-- Diamond + Batter/Count grid -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <!-- Diamond visualization -->
-                <div class="flex justify-center md:justify-start">
+        <div id="panel-scoring" class="p-4 sm:p-6">
+            <!-- Diamond left + Scoring controls right -->
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+                <div class="md:col-span-2 flex flex-col items-center">
                     {% include "competition/_field_diamond.html" %}
+                    <!-- Batter / count info below diamond -->
+                    <div class="text-center mt-3">
+                        {% if current_batter and current_batter.player_name %}
+                        <div class="mb-1">
+                            <span class="text-xs text-[var(--slate-500)] uppercase tracking-wider">Batting — {{ current_batter.side|title }}</span>
+                            <p class="text-xl font-bold text-[var(--white)]">{{ current_batter.player_name }}</p>
+                        </div>
+                        {% endif %}
+                        <div class="flex items-center justify-center gap-4 text-sm">
+                            <span class="text-[var(--slate-400)]">B <span class="text-amber-400 font-bold">{{ game.balls }}</span></span>
+                            <span class="text-[var(--slate-400)]">S <span class="text-red-400 font-bold">{{ game.strikes }}</span></span>
+                            <span class="text-[var(--slate-400)]">O <span class="font-bold text-[var(--white)]">{{ game.outs }}</span></span>
+                            <span class="text-[var(--slate-500)]">PC <span class="font-bold text-[var(--slate-300)]">{{ game.pitch_count }}</span></span>
+                        </div>
+                        <div class="text-xs text-[var(--slate-400)] mt-1">
+                            P: <strong class="text-[var(--white)]">
+                                {% if pitching_side == 'home' %}{{ current_pitcher.home.player_name|default:"—" }}{% else %}{{ current_pitcher.away.player_name|default:"—" }}{% endif %}
+                            </strong>
+                            <button type="button" onclick="document.getElementById('pitcher-modal').classList.remove('hidden')" class="text-xs bg-[var(--slate-700)] hover:bg-[var(--slate-600)] text-[var(--slate-300)] px-2 py-0.5 rounded transition ml-1">Change</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="md:col-span-3 space-y-3">
+                <!-- Row: Core pitch result -->
+                <div>
+                    <p class="text-xs font-semibold text-[var(--slate-500)] uppercase tracking-wider mb-2">Pitch Result</p>
+                    <div class="flex flex-wrap gap-2">
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="ball"><button type="submit" class="bg-amber-600 hover:bg-amber-500 text-white font-bold px-6 py-3 rounded-xl transition text-sm">Ball</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="strike"><button type="submit" class="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-3 rounded-xl transition text-sm">Strike</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="foul"><button type="submit" class="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-4 py-3 rounded-xl transition text-sm">Foul</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="bunt_foul"><button type="submit" class="bg-purple-800 hover:bg-purple-700 text-white font-semibold px-3 py-3 rounded-xl transition text-xs">Foul Bunt</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="dropped_third_strike"><button type="submit" class="bg-rose-700 hover:bg-rose-600 text-white font-semibold px-3 py-3 rounded-xl transition text-xs">Drop 3rd</button></form>
+                    </div>
                 </div>
 
-                <!-- Batter + Count + Pitchers -->
-                <div class="md:col-span-2 flex flex-col justify-center">
-                    <!-- Current batter -->
-                    {% if current_batter and current_batter.player_name %}
-                    <div class="text-center md:text-left mb-3">
-                        <span class="text-xs text-[var(--slate-500)] uppercase tracking-wider">Now Batting — {{ current_batter.side|title }}</span>
-                        <p class="text-2xl font-bold text-[var(--white)] mt-1">{{ current_batter.player_name }}</p>
+                <!-- Row: Hits -->
+                <div>
+                    <p class="text-xs font-semibold text-[var(--slate-500)] uppercase tracking-wider mb-2">Hit</p>
+                    <div class="flex flex-wrap gap-2">
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="single"><button type="submit" class="bg-emerald-700 hover:bg-emerald-600 text-white font-semibold px-4 py-2.5 rounded-lg transition text-sm">1B</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="double"><button type="submit" class="bg-emerald-700 hover:bg-emerald-600 text-white font-semibold px-4 py-2.5 rounded-lg transition text-sm">2B</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="triple"><button type="submit" class="bg-emerald-700 hover:bg-emerald-600 text-white font-semibold px-4 py-2.5 rounded-lg transition text-sm">3B</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="homerun"><button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 rounded-lg transition text-sm">HR</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="hit_by_pitch"><button type="submit" class="bg-amber-700 hover:bg-amber-600 text-white font-semibold px-3 py-2.5 rounded-lg transition text-xs">HBP</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="bunt"><input type="hidden" name="bunt_result" value="single"><button type="submit" class="bg-emerald-800 hover:bg-emerald-700 text-white font-semibold px-3 py-2.5 rounded-lg transition text-xs">Bunt H</button></form>
                     </div>
-                    {% endif %}
+                </div>
 
-                    <!-- Count display -->
-                    <div class="flex items-center justify-center md:justify-start gap-6 mb-3">
-                        <div class="text-center">
-                            <p class="text-xs text-[var(--slate-500)]">Balls</p>
-                            <p class="text-2xl font-bold text-amber-400">{{ game.balls }}</p>
-                        </div>
-                        <div class="text-center">
-                            <p class="text-xs text-[var(--slate-500)]">Strikes</p>
-                            <p class="text-2xl font-bold text-red-400">{{ game.strikes }}</p>
-                        </div>
-                        <div class="text-center">
-                            <p class="text-xs text-[var(--slate-500)]">Outs</p>
-                            <p class="text-2xl font-bold text-[var(--slate-300)]">{{ game.outs }}</p>
-                        </div>
-                        <div class="text-center">
-                            <p class="text-xs text-[var(--slate-500)]">Pitches</p>
-                            <p class="text-2xl font-bold text-[var(--slate-300)]">{{ game.pitch_count }}</p>
-                        </div>
+                <!-- Row: Outs -->
+                <div>
+                    <p class="text-xs font-semibold text-[var(--slate-500)] uppercase tracking-wider mb-2">Out / In Play</p>
+                    <div class="flex flex-wrap gap-2">
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="out_ground"><button type="submit" class="bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] px-3 py-2.5 rounded-lg transition text-xs font-semibold">Ground</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="out_fly"><button type="submit" class="bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] px-3 py-2.5 rounded-lg transition text-xs font-semibold">Fly</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="out_line"><button type="submit" class="bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] px-3 py-2.5 rounded-lg transition text-xs font-semibold">Line</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="out_pop"><button type="submit" class="bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] px-3 py-2.5 rounded-lg transition text-xs font-semibold">Pop</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="strikeout"><button type="submit" class="bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] px-3 py-2.5 rounded-lg transition text-xs font-semibold">K</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="sac_bunt"><button type="submit" class="bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-2.5 rounded-lg transition text-xs font-semibold">Sac B</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="sac_fly"><button type="submit" class="bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-2.5 rounded-lg transition text-xs font-semibold">Sac F</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="bunt"><input type="hidden" name="bunt_result" value="out_ground"><button type="submit" class="bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] px-3 py-2.5 rounded-lg transition text-xs font-semibold">Bunt O</button></form>
+                        {% if game.outs < 2 and runners.first and runners.second %}
+                        <form method="POST" class="inline" onsubmit="return confirm('Infield Fly situation: &lt;2 outs, runners on 1st &amp; 2nd. Record automatic out?')">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="infield_fly"><button type="submit" class="bg-rose-800 hover:bg-rose-700 text-white px-3 py-2.5 rounded-lg transition text-xs font-semibold">Infield Fly</button></form>
+                        {% endif %}
                     </div>
+                </div>
 
-                    <!-- Current pitcher (defensive team only) -->
-                    <div class="flex flex-wrap items-center justify-center md:justify-start gap-3 text-sm text-[var(--slate-400)]">
-                        {% with p=current_pitcher|default:"" %}
-                        <span>P: <strong class="text-[var(--white)]">
-                            {% if pitching_side == 'home' %}{{ current_pitcher.home.player_name|default:"—" }}{% else %}{{ current_pitcher.away.player_name|default:"—" }}{% endif %}
-                        </strong></span>
-                        {% endwith %}
-                        <button type="button" onclick="document.getElementById('pitcher-modal').classList.remove('hidden')" class="text-xs bg-[var(--slate-700)] hover:bg-[var(--slate-600)] text-[var(--slate-300)] px-2 py-1 rounded transition">Change</button>
+                <!-- Row: Multi-out plays -->
+                <div>
+                    <p class="text-xs font-semibold text-[var(--slate-500)] uppercase tracking-wider mb-2">Multi-Out / Special</p>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="document.getElementById('dp-modal').classList.remove('hidden')" class="bg-rose-800 hover:bg-rose-700 text-white font-semibold px-4 py-2.5 rounded-lg transition text-sm">Double Play</button>
+                        <button type="button" onclick="document.getElementById('tp-modal').classList.remove('hidden')" class="bg-rose-900 hover:bg-rose-800 text-white font-semibold px-4 py-2.5 rounded-lg transition text-sm">Triple Play</button>
+                        <button type="button" onclick="document.getElementById('fc-modal').classList.remove('hidden')" class="bg-orange-700 hover:bg-orange-600 text-white font-semibold px-3 py-2.5 rounded-lg transition text-xs">Fielder's Choice</button>
+                        <button type="button" onclick="document.getElementById('error-modal').classList.remove('hidden')" class="bg-yellow-700 hover:bg-yellow-600 text-white font-semibold px-3 py-2.5 rounded-lg transition text-xs">Error</button>
+                    </div>
+                </div>
+
+                <!-- Row: Runner plays -->
+                <div>
+                    <p class="text-xs font-semibold text-[var(--slate-500)] uppercase tracking-wider mb-2">Runner Plays</p>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="openRunnerModal('steal')" class="bg-cyan-700 hover:bg-cyan-600 text-white font-semibold px-4 py-2.5 rounded-lg transition text-sm">Steal</button>
+                        <button type="button" onclick="openRunnerModal('pickoff')" class="bg-cyan-800 hover:bg-cyan-700 text-white font-semibold px-4 py-2.5 rounded-lg transition text-sm">Pick Off</button>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="wild_pitch"><button type="submit" class="bg-teal-700 hover:bg-teal-600 text-white font-semibold px-3 py-2.5 rounded-lg transition text-xs">WP</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="passed_ball"><button type="submit" class="bg-teal-800 hover:bg-teal-700 text-white font-semibold px-3 py-2.5 rounded-lg transition text-xs">PB</button></form>
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="balk"><button type="submit" class="bg-teal-900 hover:bg-teal-800 text-white font-semibold px-3 py-2.5 rounded-lg transition text-xs">Balk</button></form>
+                    </div>
+                </div>
+
+                <!-- Row: Game controls -->
+                <div class="pt-3 border-t border-[var(--slate-700)]">
+                    <p class="text-xs font-semibold text-[var(--slate-500)] uppercase tracking-wider mb-2">Game</p>
+                    <div class="flex flex-wrap gap-2">
+                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="skip_batter"><button type="submit" class="bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] font-semibold px-4 py-2.5 rounded-lg transition text-sm">Skip Batter</button></form>
+                        <button type="button" onclick="document.getElementById('pitcher-modal').classList.remove('hidden')" class="bg-blue-700 hover:bg-blue-600 text-white font-semibold px-4 py-2.5 rounded-lg transition text-sm">Set Pitcher</button>
                     </div>
                 </div>
             </div>
 
-            <!-- Simple scoring buttons -->
-            <div id="simple-scoring" class="space-y-3">
-                <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                    <form method="POST" class="inline">
-                        {% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="ball">
-                        <button type="submit" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-4 rounded-xl transition text-base">Ball</button>
-                    </form>
-                    <form method="POST" class="inline">
-                        {% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="strike">
-                        <button type="submit" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-4 rounded-xl transition text-base">Strike</button>
-                    </form>
-                    <form method="POST" class="inline">
-                        {% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="foul">
-                        <button type="submit" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-xl transition text-base">Foul</button>
-                    </form>
-                    <form method="POST" class="inline relative">
-                        {% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="single" class="hit-type-input">
-                        <button type="button" onclick="toggleHitOptions(this)" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl transition text-base">In Play</button>
-                        <div class="hit-options hidden absolute top-full left-0 right-0 mt-1 z-10 bg-[var(--slate-700)] border border-[var(--slate-600)] rounded-xl overflow-hidden shadow-xl min-w-[340px]">
-                            <div class="grid grid-cols-2 divide-x divide-[var(--slate-600)]">
-                                <!-- Hits column -->
-                                <div>
-                                    <div class="text-xs text-[var(--slate-500)] font-semibold px-4 pt-3 pb-1 uppercase tracking-wider bg-[var(--slate-750)]">Hits</div>
-                                    <button type="submit" onclick="return selectHit(this, 'single')" class="w-full text-left px-4 py-2.5 text-sm text-[var(--white)] hover:bg-emerald-600 transition font-semibold border-b border-[var(--slate-600)]">1B — Single</button>
-                                    <button type="submit" onclick="return selectHit(this, 'double')" class="w-full text-left px-4 py-2.5 text-sm text-[var(--white)] hover:bg-emerald-600 transition font-semibold border-b border-[var(--slate-600)]">2B — Double</button>
-                                    <button type="submit" onclick="return selectHit(this, 'triple')" class="w-full text-left px-4 py-2.5 text-sm text-[var(--white)] hover:bg-emerald-600 transition font-semibold border-b border-[var(--slate-600)]">3B — Triple</button>
-                                    <button type="submit" onclick="return selectHit(this, 'homerun')" class="w-full text-left px-4 py-2.5 text-sm text-[var(--white)] hover:bg-emerald-600 transition font-semibold">HR — Home Run</button>
-                                </div>
-                                <!-- Outs column -->
-                                <div>
-                                    <div class="text-xs text-[var(--slate-500)] font-semibold px-4 pt-3 pb-1 uppercase tracking-wider">Outs</div>
-                                    <button type="submit" onclick="return selectHit(this, 'out_ground')" class="w-full text-left px-4 py-2.5 text-sm text-[var(--white)] hover:bg-rose-600 transition font-semibold border-b border-[var(--slate-600)]">Ground Out</button>
-                                    <button type="submit" onclick="return selectHit(this, 'out_fly')" class="w-full text-left px-4 py-2.5 text-sm text-[var(--white)] hover:bg-rose-600 transition font-semibold border-b border-[var(--slate-600)]">Fly Out</button>
-                                    <button type="submit" onclick="return selectHit(this, 'out_line')" class="w-full text-left px-4 py-2.5 text-sm text-[var(--white)] hover:bg-rose-600 transition font-semibold border-b border-[var(--slate-600)]">Line Out</button>
-                                    <button type="submit" onclick="return selectHit(this, 'out_pop')" class="w-full text-left px-4 py-2.5 text-sm text-[var(--white)] hover:bg-rose-600 transition font-semibold border-b border-[var(--slate-600)]">Pop Out</button>
-                                    <button type="submit" onclick="return selectHit(this, 'strikeout')" class="w-full text-left px-4 py-2.5 text-sm text-[var(--white)] hover:bg-rose-600 transition font-semibold border-b border-[var(--slate-600)]">Strikeout</button>
-                                    <div class="border-t border-[var(--slate-600)]"></div>
-                                    <button type="submit" onclick="return selectHit(this, 'double_play')" class="w-full text-left px-4 py-2.5 text-sm text-[var(--white)] hover:bg-rose-800 transition font-semibold border-b border-[var(--slate-600)]">Double Play</button>
-                                    <button type="submit" onclick="return selectHit(this, 'pickoff')" class="w-full text-left px-4 py-2.5 text-sm text-[var(--white)] hover:bg-amber-700 transition font-semibold">Pick Off</button>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                    <form method="POST" class="inline">
-                        {% csrf_token %}<input type="hidden" name="action" value="skip_batter">
-                        <button type="submit" class="w-full bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] font-bold py-4 rounded-xl transition text-base">Skip</button>
-                    </form>
-                </div>
             </div>
 
-            <!-- Complex scoring buttons -->
-            <div id="complex-scoring" class="space-y-4 hidden">
-                <div>
-                    <p class="text-xs font-semibold text-[var(--slate-400)] mb-2 text-center">Ball</p>
-                    <div class="flex flex-wrap gap-2 justify-center">
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="ball_outside"><button type="submit" class="bg-amber-700 hover:bg-amber-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">Outside</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="ball_inside"><button type="submit" class="bg-amber-700 hover:bg-amber-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">Inside</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="ball_high"><button type="submit" class="bg-amber-700 hover:bg-amber-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">High</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="ball_low"><button type="submit" class="bg-amber-700 hover:bg-amber-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">Low</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="ball_dirt"><button type="submit" class="bg-amber-700 hover:bg-amber-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">In Dirt</button></form>
-                    </div>
-                </div>
-                <div>
-                    <p class="text-xs font-semibold text-[var(--slate-400)] mb-2 text-center">Strike</p>
-                    <div class="flex flex-wrap gap-2 justify-center">
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="strike_called"><button type="submit" class="bg-red-700 hover:bg-red-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">Called</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="strike_swinging"><button type="submit" class="bg-red-700 hover:bg-red-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">Swinging</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="strike_foul_tip"><button type="submit" class="bg-red-700 hover:bg-red-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">Foul Tip</button></form>
-                    </div>
-                </div>
-                <div>
-                    <p class="text-xs font-semibold text-[var(--slate-400)] mb-2 text-center">In Play</p>
-                    <div class="flex flex-wrap gap-2 justify-center">
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="single"><button type="submit" class="bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">Single</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="double"><button type="submit" class="bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">Double</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="triple"><button type="submit" class="bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">Triple</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="homerun"><button type="submit" class="bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">Home Run</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="out_ground"><button type="submit" class="bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] px-4 py-3 rounded-lg transition text-sm font-semibold">Ground Out</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="out_fly"><button type="submit" class="bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] px-4 py-3 rounded-lg transition text-sm font-semibold">Fly Out</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="out_line"><button type="submit" class="bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] px-4 py-3 rounded-lg transition text-sm font-semibold">Line Out</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="out_pop"><button type="submit" class="bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] px-4 py-3 rounded-lg transition text-sm font-semibold">Pop Out</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="strikeout"><button type="submit" class="bg-[var(--slate-600)] hover:bg-[var(--slate-500)] text-[var(--slate-200)] px-4 py-3 rounded-lg transition text-sm font-semibold">Strikeout</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="double_play"><button type="submit" class="bg-rose-800 hover:bg-rose-700 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">Double Play</button></form>
-                        <form method="POST" class="inline">{% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="pickoff"><button type="submit" class="bg-amber-700 hover:bg-amber-600 text-white px-4 py-3 rounded-lg transition text-sm font-semibold">Pick Off</button></form>
-                    </div>
-                </div>
-            </div>
+            <!-- ===== MODALS ===== -->
 
-            <!-- Set Pitcher modal -->
+            <!-- Pitcher change modal -->
             <div id="pitcher-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/60">
                 <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-xl shadow-2xl max-w-sm w-full mx-4 p-6">
                     <h3 class="text-lg font-bold text-[var(--white)] mb-4">Change Pitcher</h3>
@@ -204,14 +178,141 @@
                             {% for entry in pitching_field %}<option value="{{ entry.player.id }}">{{ entry.player.first_name }} {{ entry.player.last_name }}</option>{% endfor %}
                         </select>
                         <div class="flex justify-end gap-3">
-                            <button type="button" onclick="document.getElementById('pitcher-modal').classList.add('hidden')" class="bg-[var(--slate-700)] hover:bg-[var(--slate-600)] text-[var(--slate-200)] font-medium px-4 py-2 rounded-lg text-sm transition">Cancel</button>
+                            <button type="button" onclick="this.closest('#pitcher-modal').classList.add('hidden')" class="bg-[var(--slate-700)] hover:bg-[var(--slate-600)] text-[var(--slate-200)] font-medium px-4 py-2 rounded-lg text-sm transition">Cancel</button>
                             <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition">Set Pitcher</button>
                         </div>
                     </form>
                 </div>
             </div>
 
-            <!-- Play-by-play feed + Scorebook/Scoreboard -->
+            <!-- Steal / Pick Off runner selection modal -->
+            <div id="runner-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/60">
+                <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-xl shadow-2xl max-w-sm w-full mx-4 p-6">
+                    <h3 class="text-lg font-bold text-[var(--white)] mb-2" id="runner-modal-title">Steal Attempt</h3>
+                    <form method="POST" id="runner-modal-form">
+                        {% csrf_token %}<input type="hidden" name="action" value="record_pitch">
+                        <input type="hidden" name="pitch_type" value="" id="runner-modal-type">
+
+                        <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Runner</label>
+                        <select name="runner_base" id="runner-modal-base" class="w-full bg-[var(--slate-700)] border border-[var(--slate-600)] rounded-lg px-4 py-3 text-sm text-[var(--white)] mb-3">
+                            <option value="">— Select Runner —</option>
+                            {% if runners.first %}
+                            <option value="first" data-next="2nd">1st Base — {{ runners.first.player_name }} → Steals 2nd</option>
+                            {% endif %}
+                            {% if runners.second %}
+                            <option value="second" data-next="3rd">2nd Base — {{ runners.second.player_name }} → Steals 3rd</option>
+                            {% endif %}
+                            {% if runners.third %}
+                            <option value="third" data-next="Home">3rd Base — {{ runners.third.player_name }} → Steals Home</option>
+                            {% endif %}
+                        </select>
+                        <p id="steal-destination" class="text-sm text-emerald-400 font-semibold mb-3 text-center"></p>
+
+                        <div id="steal-result-options">
+                            <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Result</label>
+                            <div class="flex gap-3 mb-4">
+                                <label class="flex items-center gap-2 bg-emerald-700/30 hover:bg-emerald-700/50 px-4 py-2.5 rounded-lg cursor-pointer border border-emerald-600/30">
+                                    <input type="radio" name="steal_result" value="safe" checked class="accent-emerald-400"> <span class="text-sm text-[var(--white)]">Safe</span>
+                                </label>
+                                <label class="flex items-center gap-2 bg-rose-700/30 hover:bg-rose-700/50 px-4 py-2.5 rounded-lg cursor-pointer border border-rose-600/30">
+                                    <input type="radio" name="steal_result" value="caught" class="accent-rose-400"> <span class="text-sm text-[var(--white)]">Caught</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end gap-3">
+                            <button type="button" onclick="this.closest('#runner-modal').classList.add('hidden')" class="bg-[var(--slate-700)] hover:bg-[var(--slate-600)] text-[var(--slate-200)] font-medium px-4 py-2 rounded-lg text-sm transition">Cancel</button>
+                            <button type="submit" class="bg-cyan-600 hover:bg-cyan-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition">Record</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Double Play / Triple Play / Fielder's Choice runner-out modal -->
+            <div id="dp-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/60">
+                <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
+                    <h3 class="text-lg font-bold text-[var(--white)] mb-4">Double Play</h3>
+                    <form method="POST">
+                        {% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="double_play">
+                        <p class="text-sm text-[var(--slate-400)] mb-4">Which runner is out on the double play?</p>
+                        <select name="runner_base" class="w-full bg-[var(--slate-700)] border border-[var(--slate-600)] rounded-lg px-4 py-3 text-sm text-[var(--white)] mb-4">
+                            <option value="">— Automatic (lead runner) —</option>
+                            {% if runners.first %}
+                            <option value="first">1st Base — {{ runners.first.player_name }}</option>
+                            {% endif %}
+                            {% if runners.second %}
+                            <option value="second">2nd Base — {{ runners.second.player_name }}</option>
+                            {% endif %}
+                            {% if runners.third %}
+                            <option value="third">3rd Base — {{ runners.third.player_name }}</option>
+                            {% endif %}
+                        </select>
+                        <div class="flex justify-end gap-3">
+                            <button type="button" onclick="this.closest('#dp-modal').classList.add('hidden')" class="bg-[var(--slate-700)] hover:bg-[var(--slate-600)] text-[var(--slate-200)] font-medium px-4 py-2 rounded-lg text-sm transition">Cancel</button>
+                            <button type="submit" class="bg-rose-600 hover:bg-rose-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition">Record DP</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Triple Play modal -->
+            <div id="tp-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/60">
+                <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
+                    <h3 class="text-lg font-bold text-[var(--white)] mb-2">Triple Play</h3>
+                    <p class="text-xs text-[var(--slate-500)] mb-4">Batter and all runners are out. Both runners will be recorded as out.</p>
+                    <form method="POST">
+                        {% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="triple_play">
+                        <div class="flex justify-end gap-3">
+                            <button type="button" onclick="this.closest('#tp-modal').classList.add('hidden')" class="bg-[var(--slate-700)] hover:bg-[var(--slate-600)] text-[var(--slate-200)] font-medium px-4 py-2 rounded-lg text-sm transition">Cancel</button>
+                            <button type="submit" class="bg-rose-800 hover:bg-rose-700 text-white font-medium px-4 py-2 rounded-lg text-sm transition">Record Triple Play</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Error modal -->
+            <div id="error-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/60">
+                <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-xl shadow-2xl max-w-sm w-full mx-4 p-6">
+                    <h3 class="text-lg font-bold text-[var(--white)] mb-4">Error</h3>
+                    <form method="POST">
+                        {% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="error">
+                        <p class="text-sm text-[var(--slate-400)] mb-4">Batter reaches safely on an error. Runners advance one base. No AB or hit charged.</p>
+                        <div class="flex justify-end gap-3">
+                            <button type="button" onclick="this.closest('#error-modal').classList.add('hidden')" class="bg-[var(--slate-700)] hover:bg-[var(--slate-600)] text-[var(--slate-200)] font-medium px-4 py-2 rounded-lg text-sm transition">Cancel</button>
+                            <button type="submit" class="bg-yellow-600 hover:bg-yellow-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition">Record Error</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Fielder's Choice modal -->
+            <div id="fc-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/60">
+                <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
+                    <h3 class="text-lg font-bold text-[var(--white)] mb-4">Fielder's Choice</h3>
+                    <form method="POST">
+                        {% csrf_token %}<input type="hidden" name="action" value="record_pitch"><input type="hidden" name="pitch_type" value="fielders_choice">
+                        <p class="text-sm text-[var(--slate-400)] mb-3">Batter safe at 1st, lead runner out. Which runner is out?</p>
+                        <select name="runner_base" class="w-full bg-[var(--slate-700)] border border-[var(--slate-600)] rounded-lg px-4 py-3 text-sm text-[var(--white)] mb-4">
+                            <option value="">— Automatic (lead runner) —</option>
+                            {% if runners.first %}
+                            <option value="first">1st Base — {{ runners.first.player_name }}</option>
+                            {% endif %}
+                            {% if runners.second %}
+                            <option value="second">2nd Base — {{ runners.second.player_name }}</option>
+                            {% endif %}
+                            {% if runners.third %}
+                            <option value="third">3rd Base — {{ runners.third.player_name }}</option>
+                            {% endif %}
+                        </select>
+                        <div class="flex justify-end gap-3">
+                            <button type="button" onclick="this.closest('#fc-modal').classList.add('hidden')" class="bg-[var(--slate-700)] hover:bg-[var(--slate-600)] text-[var(--slate-200)] font-medium px-4 py-2 rounded-lg text-sm transition">Cancel</button>
+                            <button type="submit" class="bg-orange-600 hover:bg-orange-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition">Record FC</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Play-by-play + history tabs -->
             <div class="mt-6 pt-4 border-t border-[var(--slate-700)]">
                 <div class="flex items-center gap-4 mb-4">
                     <button type="button" id="tab-playbyplay" class="text-sm font-semibold text-emerald-400 border-b-2 border-emerald-400 pb-1" onclick="switchPlayView('playbyplay')">Play-by-Play</button>
@@ -222,7 +323,7 @@
 
                 <!-- Play-by-Play view -->
                 <div id="view-playbyplay">
-                    <div class="max-h-80 overflow-y-auto space-y-1.5" id="playbyplay-feed">
+                    <div class="max-h-72 overflow-y-auto space-y-1.5" id="playbyplay-feed">
                         {% if pitches %}
                             {% for pitch in pitches|slice:"::-1" %}
                             <div class="flex items-start gap-2 text-sm {% if pitch.was_at_bat_end %}bg-[var(--slate-900)]{% else %}bg-transparent{% endif %} rounded-lg px-4 py-2">
@@ -233,23 +334,23 @@
                                     <span class="text-emerald-400 font-bold"> (+{{ pitch.runs_scored }})</span>
                                     {% endif %}
                                 </span>
-                                <span class="text-[var(--slate-600)] text-xs shrink-0 pt-0.5">Inn {{ pitch.inning }}{% if pitch.is_top %}&#8593;{% else %}&#8595;{% endif %}</span>
-                            </div>
-                            {% endfor %}
-                        {% else %}
-                        <p class="text-[var(--slate-500)] text-sm text-center py-6">No pitches recorded yet. Start the game to see live play-by-play.</p>
+                                <span class="text-[var(--slate-600)] text-xs shrink-0 pt-0.5">{% if pitch.is_top %}&#9650; Top{% else %}&#9660; Bot{% endif %} {{ pitch.inning }}</span>
+                             </div>
+                             {% endfor %}
+                         {% else %}
+                         <p class="text-[var(--slate-500)] text-sm text-center py-6">No pitches recorded yet. Start scoring to see the play-by-play.</p>
                         {% endif %}
                     </div>
                 </div>
 
                 <!-- Scorebook view -->
                 <div id="view-scorebook" class="hidden">
-                    <div class="max-h-80 overflow-y-auto space-y-1.5">
+                    <div class="max-h-72 overflow-y-auto space-y-1.5">
                         {% if pitches %}
                             {% for pitch in pitches|slice:"::-1" %}
                             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs bg-[var(--slate-900)] rounded-lg px-4 py-2">
                                 <span class="text-[var(--slate-600)] w-6 shrink-0">#{{ pitch.id }}</span>
-                                <span class="text-[var(--slate-500)] shrink-0">Inn {{ pitch.inning }}{% if pitch.is_top %}&#8593;{% else %}&#8595;{% endif %}</span>
+                                <span class="text-[var(--slate-500)] shrink-0">{% if pitch.is_top %}&#9650; Top{% else %}&#9660; Bot{% endif %} {{ pitch.inning }}</span>
                                 <span class="{% if 'ball' in pitch.result.type %}text-amber-400{% elif 'strike' in pitch.result.type %}text-red-400{% elif pitch.result.type == 'foul' %}text-purple-400{% else %}text-emerald-400{% endif %} font-semibold shrink-0">{{ pitch.result.type }}</span>
                                 {% if pitch.batter.player_name %}<span class="text-[var(--slate-400)]"><span class="text-[var(--slate-600)]">B:</span>{{ pitch.batter.player_name }}</span>{% endif %}
                                 {% if pitch.pitcher.player_name %}<span class="text-[var(--slate-400)]"><span class="text-[var(--slate-600)]">P:</span>{{ pitch.pitcher.player_name }}</span>{% endif %}
@@ -300,25 +401,20 @@
         </form>
     </div>
     {% endif %}
+
+    {% if game.is_live %}
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-xl p-6 mb-4">
+        <form method="POST" onsubmit="return confirm('Reset game? This will erase ALL scoring data and return to pre-game state.')">{% csrf_token %}
+            <input type="hidden" name="action" value="reset_game">
+            <button type="submit" class="bg-rose-900/50 hover:bg-rose-800/70 text-rose-300 font-semibold py-2.5 px-6 rounded-lg transition text-xs border border-rose-800/40">Reset Game</button>
+        </form>
+    </div>
+    {% endif %}
 </div>
 
 <script>
-let activeHitDropdown = null;
+// === Tab switching ===
 let activeTab = 'scoring';
-
-function toggleHitOptions(btn) {
-    const options = btn.nextElementSibling;
-    if (activeHitDropdown && activeHitDropdown !== options) activeHitDropdown.classList.add('hidden');
-    options.classList.toggle('hidden');
-    activeHitDropdown = options.classList.contains('hidden') ? null : options;
-}
-
-function selectHit(btn, type) {
-    const form = btn.closest('form');
-    form.querySelector('.hit-type-input').value = type;
-    form.submit();
-    return false;
-}
 
 function switchTab(tab) {
     activeTab = tab;
@@ -328,28 +424,11 @@ function switchTab(tab) {
     });
     document.getElementById('tab-' + tab).classList.remove('text-[var(--slate-400)]');
     document.getElementById('tab-' + tab).classList.add('text-emerald-400', 'border-b-2', 'border-emerald-400');
-
     document.querySelectorAll('[id^="panel-"]').forEach(p => p.classList.add('hidden'));
     document.getElementById('panel-' + tab).classList.remove('hidden');
 }
 
-function toggleScoringMode() {
-    const simple = document.getElementById('simple-scoring');
-    const complex = document.getElementById('complex-scoring');
-    const knob = document.getElementById('mode-toggle-knob');
-    const sl = document.getElementById('mode-label-simple');
-    const cl = document.getElementById('mode-label-complex');
-    const isComplex = !complex.classList.contains('hidden');
-    complex.classList.toggle('hidden', isComplex);
-    simple.classList.toggle('hidden', !isComplex);
-    knob.classList.toggle('translate-x-6', !isComplex);
-    knob.classList.toggle('translate-x-0', isComplex);
-    sl.classList.toggle('text-emerald-400', isComplex);
-    sl.classList.toggle('text-[var(--slate-400)]', !isComplex);
-    cl.classList.toggle('text-emerald-400', !isComplex);
-    cl.classList.toggle('text-[var(--slate-400)]', isComplex);
-}
-
+// === Play view switching ===
 function switchPlayView(view) {
     const views = ['playbyplay', 'scorebook', 'scoreboard'];
     views.forEach(v => {
@@ -364,5 +443,72 @@ function switchPlayView(view) {
         }
     });
 }
+
+// === Runner modal (steal / pickoff) ===
+function openRunnerModal(type) {
+    const modal = document.getElementById('runner-modal');
+    const title = document.getElementById('runner-modal-title');
+    const typeInput = document.getElementById('runner-modal-type');
+    const resultOptions = document.getElementById('steal-result-options');
+    const submitBtn = modal.querySelector('button[type="submit"]');
+
+    typeInput.value = type;
+
+    if (type === 'steal') {
+        title.textContent = 'Steal Attempt';
+        resultOptions.classList.remove('hidden');
+        submitBtn.className = 'bg-cyan-600 hover:bg-cyan-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition';
+        submitBtn.textContent = 'Record Steal';
+    } else if (type === 'pickoff') {
+        title.textContent = 'Pick Off Attempt';
+        resultOptions.classList.add('hidden');
+        submitBtn.className = 'bg-cyan-800 hover:bg-cyan-700 text-white font-medium px-4 py-2 rounded-lg text-sm transition';
+        submitBtn.textContent = 'Record Pick Off';
+    }
+
+    modal.classList.remove('hidden');
+}
+
+// Handle runner modal form submission
+document.addEventListener('DOMContentLoaded', function() {
+    const runnerForm = document.getElementById('runner-modal-form');
+    if (runnerForm) {
+        runnerForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const pitchType = document.getElementById('runner-modal-type').value;
+            const result = runnerForm.querySelector('input[name="steal_result"]:checked');
+
+            if (pitchType === 'steal' && result && result.value === 'caught') {
+                // Change to caught_stealing type
+                document.getElementById('runner-modal-type').value = 'caught_stealing';
+            }
+
+            // Submit the form
+            this.submit();
+        });
+    }
+});
+
+// Update steal destination display on runner selection
+document.getElementById('runner-modal-base').addEventListener('change', function() {
+    const dest = document.getElementById('steal-destination');
+    const selected = this.options[this.selectedIndex];
+    if (selected && selected.value) {
+        const baseName = selected.textContent.split('→')[0].trim();
+        const nextBase = selected.dataset.next || '';
+        dest.textContent = `${baseName} → Steals ${nextBase}`;
+    } else {
+        dest.textContent = '';
+    }
+});
+
+// Auto-close modals on backdrop click
+document.querySelectorAll('.fixed.inset-0').forEach(modal => {
+    modal.addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.classList.add('hidden');
+        }
+    });
+});
 </script>
 {% endblock %}

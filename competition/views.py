@@ -13,6 +13,32 @@ from .scheduling import get_week_range, team_event_count, team_can_add_events, g
 from profiles.models import PlayerMembership, TeamMembership, Player
 
 
+def _build_extra_from_post(post_data, pitch_type):
+    """Extract extra parameters from POST data for complex pitch types."""
+    extra = {}
+    if pitch_type in ('steal', 'caught_stealing', 'pickoff', 'fielders_choice'):
+        runner_base = post_data.get('runner_base')
+        if runner_base:
+            extra['runner_base'] = runner_base
+    if pitch_type == 'caught_stealing':
+        caught_base = post_data.get('caught_base')
+        if caught_base:
+            extra['caught_base'] = caught_base
+    if pitch_type in ('double_play', 'triple_play'):
+        import json
+        outs_raw = post_data.get('dp_outs')
+        if outs_raw:
+            try:
+                extra['outs'] = json.loads(outs_raw)
+            except (json.JSONDecodeError, TypeError):
+                pass
+    if pitch_type == 'bunt':
+        bunt_result = post_data.get('bunt_result')
+        if bunt_result:
+            extra['bunt_result'] = bunt_result
+    return extra
+
+
 class TeamEventsListView(LoginRequiredMixin, ListView):
     """
     Display all events for a team in calendar/list format.
@@ -669,6 +695,9 @@ class GameDetailView(LoginRequiredMixin, View):
             'position_choices': DEFENSIVE_POSITION_CHOICES,
             'conflict': conflict,
             'game_window_open': game_window_open,
+            'runners': game.scoring_data.get('runners', {'first': None, 'second': None, 'third': None}),
+            'current_pitcher': game.scoring_data.get('current_pitcher', {}),
+            'pitches': game.scoring_data.get('pitches', []),
         })
 
     def post(self, request, game_id):
@@ -676,7 +705,7 @@ class GameDetailView(LoginRequiredMixin, View):
         action = request.POST.get('action')
 
         # --- Actions that need score_game permission ---
-        scoring_actions = ['save_score', 'start_game', 'record_pitch', 'set_pitcher']
+        scoring_actions = ['save_score', 'start_game', 'record_pitch', 'record_nonpitch', 'set_pitcher', 'reset_game']
         if action in scoring_actions:
             if not self._can_score_game(request, game):
                 messages.error(request, "You don't have scoring permission.")
@@ -744,6 +773,23 @@ class GameDetailView(LoginRequiredMixin, View):
             messages.success(request, "Game started!")
             return redirect('game_score', game_id=game.id)
 
+        # Reset game — clear all scoring data, return to pre-game state
+        if action == 'reset_game':
+            game.is_live = False
+            game.is_completed = False
+            game.current_inning = 1
+            game.is_top_inning = True
+            game.outs = 0
+            game.balls = 0
+            game.strikes = 0
+            game.pitch_count = 0
+            game.home_score = 0
+            game.away_score = 0
+            game.scoring_data = {}
+            game.save()
+            messages.success(request, "Game has been reset.")
+            return redirect('game_detail', game_id=game.id)
+
         # Record pitch
         if action == 'record_pitch':
             pitch_type = request.POST.get('pitch_type')
@@ -753,18 +799,38 @@ class GameDetailView(LoginRequiredMixin, View):
                 'strike_called', 'strike_swinging', 'strike_foul_tip',
                 'single', 'double', 'triple', 'homerun',
                 'out_ground', 'out_fly', 'out_line', 'out_pop', 'strikeout',
-                'double_play', 'pickoff',
+                'double_play', 'triple_play', 'pickoff',
+                'steal', 'caught_stealing', 'hit_by_pitch',
+                'sac_bunt', 'sac_fly', 'error', 'fielders_choice',
+                'wild_pitch', 'passed_ball', 'balk', 'dropped_third_strike',
+                'infield_fly', 'bunt', 'bunt_foul',
             }
             if pitch_type not in valid_types:
                 messages.error(request, "Invalid pitch type.")
                 return redirect('game_detail', game_id=game.id)
+            extra = _build_extra_from_post(request.POST, pitch_type)
             from .api import _apply_record_pitch
-            _apply_record_pitch(game, pitch_type)
+            _apply_record_pitch(game, pitch_type, extra=extra)
+            game.save()
+            return redirect('game_detail', game_id=game.id)
+
+        # Record non-pitch event (same handler, but via nonpitch action)
+        if action == 'record_nonpitch':
+            pitch_type = request.POST.get('pitch_type')
+            valid_nonpitch = {
+                'steal', 'caught_stealing', 'wild_pitch', 'passed_ball', 'balk',
+                'pickoff',
+            }
+            if pitch_type not in valid_nonpitch:
+                messages.error(request, "Invalid non-pitch event type.")
+                return redirect('game_detail', game_id=game.id)
+            extra = _build_extra_from_post(request.POST, pitch_type)
+            from .api import _apply_record_pitch
+            _apply_record_pitch(game, pitch_type, extra=extra)
             game.save()
             return redirect('game_detail', game_id=game.id)
 
         # Set pitcher
-        if action == 'set_pitcher':
             player_id = request.POST.get('pitcher_player_id')
             side = request.POST.get('side')
             if player_id and side in ('home', 'away'):
@@ -1012,13 +1078,18 @@ class GameScoreView(LoginRequiredMixin, View):
                 'strike_called', 'strike_swinging', 'strike_foul_tip',
                 'single', 'double', 'triple', 'homerun',
                 'out_ground', 'out_fly', 'out_line', 'out_pop', 'strikeout',
-                'double_play', 'pickoff',
+                'double_play', 'triple_play', 'pickoff',
+                'steal', 'caught_stealing', 'hit_by_pitch',
+                'sac_bunt', 'sac_fly', 'error', 'fielders_choice',
+                'wild_pitch', 'passed_ball', 'balk', 'dropped_third_strike',
+                'infield_fly', 'bunt', 'bunt_foul',
             }
             if pitch_type not in valid_types:
                 messages.error(request, "Invalid pitch type.")
                 return redirect('game_score', game_id=game.id)
+            extra = _build_extra_from_post(request.POST, pitch_type)
             from .api import _apply_record_pitch
-            _apply_record_pitch(game, pitch_type)
+            _apply_record_pitch(game, pitch_type, extra=extra)
             game.save()
             return redirect('game_score', game_id=game.id)
 
