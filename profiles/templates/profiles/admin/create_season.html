@@ -4,28 +4,28 @@
 
 {% block content %}
 <div class="max-w-3xl mx-auto">
-    <h1 class="text-2xl font-bold text-white mb-2">Create Season</h1>
-    <p class="text-slate-400 mb-6">Set up a new season for your organization.</p>
+    <h1 class="text-2xl font-bold text-[var(--white)] mb-2">Create Season</h1>
+    <p class="text-[var(--slate-400)] mb-6">Set up a new season for your organization.</p>
 
-    <div class="bg-slate-800 border border-slate-700 rounded-lg p-6">
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-6">
         <form method="POST" class="space-y-5">
             {% csrf_token %}
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">{{ form.organization.label }}</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">{{ form.organization.label }}</label>
                 {{ form.organization }}
                 {% if form.organization.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.organization.errors }}</p>{% endif %}
             </div>
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">{{ form.season.label }}</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">{{ form.season.label }}</label>
                 {{ form.season }}
                 {% if form.season.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.season.errors }}</p>{% endif %}
             </div>
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">{{ form.year.label }}</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">{{ form.year.label }}</label>
                 {{ form.year }}
                 {% if form.year.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.year.errors }}</p>{% endif %}
             </div>
-            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg transition">Create Season</button>
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-[var(--white)] font-bold py-2.5 rounded-lg transition">Create Season</button>
         </form>
     </div>
 </div>
@@ -33,7 +33,7 @@
 <script>
     document.querySelectorAll('input, select, textarea').forEach(field => {
         if (field.type !== 'checkbox') {
-            field.classList.add('w-full', 'bg-slate-900', 'border', 'border-slate-700', 'rounded-lg', 'px-4', 'py-2.5', 'text-slate-100', 'focus:outline-none', 'focus:border-emerald-500', 'transition');
+            field.classList.add('w-full', 'bg-[var(--slate-900)]', 'border', 'border-[var(--slate-700)]', 'rounded-lg', 'px-4', 'py-2.5', 'text-[var(--slate-100)]', 'focus:outline-none', 'focus:border-emerald-500', 'transition');
         }
     });
 </script>

@@ -15,6 +15,7 @@ class Organization(models.Model):
     city = models.CharField(max_length=100)
     state = models.CharField(max_length=2)
     zip_code = models.CharField(max_length=10)
+    max_events_per_team_per_week = models.PositiveIntegerField(default=10, help_text="Maximum number of countable events a team can have in a Mon-Sun week")
 
     def __str__(self):
         return self.name
@@ -67,6 +68,28 @@ class Division(models.Model):
     @property
     def organization(self):
         return self.season.organization
+
+
+class Facility(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='facilities')
+    name = models.CharField(max_length=255, help_text="Facility or school name")
+    address = models.CharField(max_length=255, blank=True, help_text="Street address, city, state, zip")
+    field_name = models.CharField(max_length=255, blank=True, help_text="e.g. Field 1, North Field, Main Diamond")
+    notes = models.TextField(blank=True, help_text="Parking instructions, gate codes, etc.")
+
+    class Meta:
+        verbose_name_plural = "facilities"
+        ordering = ['name', 'field_name']
+
+    def __str__(self):
+        label = self.name
+        if self.field_name:
+            label += f" \u2014 {self.field_name}"
+        if self.address:
+            label += f" ({self.address})"
+        return label
+
 
 class Team(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

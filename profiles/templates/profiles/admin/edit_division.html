@@ -4,41 +4,41 @@
 
 {% block content %}
 <div class="max-w-4xl mx-auto">
-    <h1 class="text-2xl font-bold text-white mb-2">Edit Division</h1>
-    <p class="text-slate-400 mb-6">Change division name, template, notes, or positions.</p>
+    <h1 class="text-2xl font-bold text-[var(--white)] mb-2">Edit Division</h1>
+    <p class="text-[var(--slate-400)] mb-6">Change division name, template, notes, or positions.</p>
 
-    <div class="bg-slate-800 border border-slate-700 rounded-lg p-6">
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-6">
         <form method="POST" class="space-y-5">
             {% csrf_token %}
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Name</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Name</label>
                 {{ form.name }}
                 {% if form.name.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.name.errors }}</p>{% endif %}
             </div>
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Template</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Template</label>
                 {{ form.preset_type }}
                 {% if form.preset_type.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.preset_type.errors }}</p>{% endif %}
             </div>
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Notes</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Notes</label>
                 {{ form.notes }}
                 {% if form.notes.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.notes.errors }}</p>{% endif %}
             </div>
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-2">Allowed Positions</label>
-                <p class="text-slate-400 text-xs mb-3">Select which positions are allowed. Unchecked positions will be hidden from the lineup editor.</p>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-2">Allowed Positions</label>
+                <p class="text-[var(--slate-400)] text-xs mb-3">Select which positions are allowed. Unchecked positions will be hidden from the lineup editor.</p>
                 <div class="flex flex-wrap gap-2">
                     {% for checkbox in form.allowed_positions %}
-                    <label class="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 cursor-pointer hover:border-emerald-500 transition has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/5">
+                    <label class="flex items-center gap-2 bg-[var(--slate-900)] border border-[var(--slate-700)] rounded-lg px-3 py-2 cursor-pointer hover:border-emerald-500 transition has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/5">
                         {{ checkbox.tag }}
-                        <span class="text-slate-200 text-sm font-medium">{{ checkbox.choice_label }}</span>
+                        <span class="text-[var(--slate-200)] text-sm font-medium">{{ checkbox.choice_label }}</span>
                     </label>
                     {% endfor %}
                 </div>
                 {% if form.allowed_positions.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.allowed_positions.errors }}</p>{% endif %}
             </div>
-            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-lg transition">Save</button>
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-[var(--white)] font-semibold py-2.5 rounded-lg transition">Save</button>
         </form>
     </div>
 </div>

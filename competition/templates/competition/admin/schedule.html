@@ -1,0 +1,142 @@
+{% extends 'profiles/base.html' %}
+
+{% block title %}Admin Schedule - {{ division.name }} - DiamondManager{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-[var(--white)]">Schedule: {{ division.name }}</h1>
+            <p class="text-[var(--slate-400)] text-sm">{{ season.season }} {{ season.year }} &middot; {{ organization.name }}</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="{% url 'season_detail' season.id %}" class="bg-[var(--slate-700)] hover:bg-[var(--slate-600)] text-[var(--slate-200)] font-medium py-2 px-4 rounded-lg text-sm transition">&larr; Back to Season</a>
+        </div>
+    </div>
+
+    {% if messages %}
+    <div class="mb-6 space-y-2">
+        {% for message in messages %}
+        <div class="{% if message.tags == 'error' %}bg-rose-900/50 border-rose-700 text-rose-200{% else %}bg-emerald-900/50 border-emerald-700 text-emerald-200{% endif %} border rounded-lg px-4 py-3 text-sm">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Week Navigation -->
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-4 mb-6">
+        <div class="flex items-center justify-between">
+            <a href="?year={{ prev_week|date:'Y' }}&month={{ prev_week|date:'m' }}&day={{ prev_week|date:'d' }}" class="text-[var(--slate-400)] hover:text-[var(--slate-200)] transition">&larr; Previous</a>
+            <div class="text-center">
+                <p class="text-[var(--white)] font-semibold">Week of {{ week_start|date:"M j" }} – {{ week_end|date:"M j, Y" }}</p>
+            </div>
+            <a href="?year={{ next_week|date:'Y' }}&month={{ next_week|date:'m' }}&day={{ next_week|date:'d' }}" class="text-[var(--slate-400)] hover:text-[var(--slate-200)] transition">Next &rarr;</a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Team Status Panel -->
+        <div class="lg:col-span-1">
+            <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-5">
+                <h2 class="text-lg font-semibold text-[var(--white)] mb-4">Team Event Limits</h2>
+                <p class="text-[var(--slate-400)] text-xs mb-4">Max {{ team_data.0.max_allowed }} events per team per week</p>
+                <div class="space-y-3">
+                    {% for td in team_data %}
+                    <div class="bg-[var(--slate-900)] border border-[var(--slate-700)] rounded-lg p-3">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-[var(--white)] font-medium text-sm">{{ td.team.name }}</span>
+                            <span class="{{ td.status_class }} text-sm font-mono font-semibold">{{ td.current_count }}/{{ td.max_allowed }}</span>
+                        </div>
+                        <div class="w-full bg-[var(--slate-700)] rounded-full h-1.5 overflow-hidden">
+                            <div class="bg-emerald-500 rounded-full h-1.5 transition-all" style="width: {% widthratio td.current_count td.max_allowed 100 %}%"></div>
+                        </div>
+                        <p class="text-[var(--slate-500)] text-xs mt-1">
+                            {% if td.remaining > 0 %}{{ td.remaining }} slot{{ td.remaining|pluralize }} available{% else %}At limit{% endif %}
+                        </p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule Form -->
+        <div class="lg:col-span-2">
+            <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-5">
+                <h2 class="text-lg font-semibold text-[var(--white)] mb-4">Schedule Event</h2>
+                <form method="POST" class="space-y-4">
+                    {% csrf_token %}
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">{{ form.home_team.label }}</label>
+                            {{ form.home_team }}
+                            {% if form.home_team.errors %}<p class="text-rose-400 text-xs mt-1">{{ form.home_team.errors.0 }}</p>{% endif %}
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">{{ form.away_team.label }}</label>
+                            {{ form.away_team }}
+                            {% if form.away_team.errors %}<p class="text-rose-400 text-xs mt-1">{{ form.away_team.errors.0 }}</p>{% endif %}
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">{{ form.event_type.label }}</label>
+                            {{ form.event_type }}
+                            {% if form.event_type.errors %}<p class="text-rose-400 text-xs mt-1">{{ form.event_type.errors.0 }}</p>{% endif %}
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">{{ form.date_time.label }}</label>
+                            {{ form.date_time }}
+                            {% if form.date_time.errors %}<p class="text-rose-400 text-xs mt-1">{{ form.date_time.errors.0 }}</p>{% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">{{ form.location.label }}</label>
+                        {{ form.location }}
+                        {% if form.location.errors %}<p class="text-rose-400 text-xs mt-1">{{ form.location.errors.0 }}</p>{% endif %}
+                        <p class="text-[var(--slate-500)] text-xs mt-1">Select a facility, or type a custom location below.</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Custom Location</label>
+                        {{ form.location_custom }}
+                        {% if form.location_custom.errors %}<p class="text-rose-400 text-xs mt-1">{{ form.location_custom.errors.0 }}</p>{% endif %}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{ form.counts_against_limit }}
+                        <label for="{{ form.counts_against_limit.id_for_label }}" class="text-sm text-[var(--slate-300)]">{{ form.counts_against_limit.label }}</label>
+                    </div>
+                    {% if form.non_field_errors %}
+                    <p class="text-rose-400 text-sm">{{ form.non_field_errors.0 }}</p>
+                    {% endif %}
+                    <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-[var(--white)] font-semibold py-2.5 rounded-lg transition">Schedule Event</button>
+                </form>
+            </div>
+
+            <!-- Existing Events This Week -->
+            <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-5 mt-6">
+                <h2 class="text-lg font-semibold text-[var(--white)] mb-4">Events This Week</h2>
+                {% if week_events %}
+                <div class="space-y-2">
+                    {% for event in week_events %}
+                    <div class="bg-[var(--slate-900)] border border-[var(--slate-700)] rounded-lg p-3 flex items-center justify-between">
+                        <div>
+                            <p class="text-[var(--white)] text-sm font-medium">{{ event.title }}</p>
+                            <p class="text-[var(--slate-400)] text-xs">{{ event.date_time|date:"D M j, g:i A" }}{% if event.location %} &middot; {{ event.location }}{% endif %}</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {% if not event.counts_against_limit %}
+                            <span class="text-xs bg-amber-900/50 text-amber-300 px-2 py-0.5 rounded">Free</span>
+                            {% endif %}
+                            <span class="text-xs bg-[var(--slate-700)] text-[var(--slate-300)] px-2 py-0.5 rounded">{{ event.get_event_type_display }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-[var(--slate-400)] text-sm">No events scheduled for this week.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

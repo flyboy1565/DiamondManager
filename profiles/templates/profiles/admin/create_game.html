@@ -4,29 +4,29 @@
 
 {% block content %}
 <div class="max-w-2xl mx-auto">
-    <h1 class="text-2xl font-bold text-white mb-2">Create Game</h1>
-    <p class="text-slate-400 mb-6">Schedule a game for {{ team.name }}.</p>
+    <h1 class="text-2xl font-bold text-[var(--white)] mb-2">Create Game</h1>
+    <p class="text-[var(--slate-400)] mb-6">Schedule a game for {{ team.name }}.</p>
 
-    <div class="bg-slate-800 border border-slate-700 rounded-lg p-6">
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-6">
         <form method="POST" class="space-y-4">
             {% csrf_token %}
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Date & Time</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Date & Time</label>
                 {{ form.date_time }}
             </div>
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Location</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Location</label>
                 {{ form.location }}
             </div>
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Is Home Game?</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Is Home Game?</label>
                 {{ form.is_home }}
             </div>
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Opponent Name</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Opponent Name</label>
                 {{ form.opponent_name }}
             </div>
-            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-lg transition">Create Game</button>
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-[var(--white)] font-semibold py-2.5 rounded-lg transition">Create Game</button>
         </form>
     </div>
 </div>

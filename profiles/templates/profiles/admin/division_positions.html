@@ -1,40 +1,85 @@
 {% extends 'profiles/base.html' %}
 
-{% block title %}Division Positions - DiamondManager{% endblock %}
+{% block title %}Organization Settings - DiamondManager{% endblock %}
 
 {% block content %}
 <div class="max-w-6xl mx-auto">
     <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold text-white">Division Positions</h1>
+        <h1 class="text-2xl font-bold text-[var(--white)]">Organization Settings</h1>
+        <p class="text-[var(--slate-400)] text-sm">{{ organization.name }}</p>
     </div>
 
+    {% if messages %}
+    <div class="mb-6 space-y-2">
+        {% for message in messages %}
+        <div class="{% if message.tags == 'error' %}bg-rose-900/50 border-rose-700 text-rose-200{% else %}bg-emerald-900/50 border-emerald-700 text-emerald-200{% endif %} border rounded-lg px-4 py-3 text-sm">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- League Settings -->
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-5 mb-6">
+        <h2 class="text-lg font-semibold text-[var(--white)] mb-1">League Settings</h2>
+        <p class="text-[var(--slate-400)] text-sm mb-4">Configure league-wide scheduling limits.</p>
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_org_settings">
+            <div class="flex items-center gap-4 flex-wrap">
+                <label class="text-sm font-semibold text-[var(--slate-300)] whitespace-nowrap">Max events per team per week:</label>
+                <input type="number" name="max_events_per_team_per_week" value="{{ organization.max_events_per_team_per_week }}" min="1" max="50"
+                       class="w-24 bg-[var(--slate-900)] border border-[var(--slate-700)] rounded-lg px-3 py-2 text-[var(--slate-100)] focus:outline-none focus:border-emerald-500 transition">
+                <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-[var(--white)] font-semibold px-4 py-2 rounded-lg text-sm transition">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Event Locations -->
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-5 mb-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-lg font-semibold text-[var(--white)] mb-1">Facilities</h2>
+                <p class="text-[var(--slate-400)] text-sm">
+                    {{ facility_count }} facility{{ facility_count|pluralize }} configured
+                </p>
+            </div>
+            <a href="{% url 'manage_facilities' %}"
+               class="bg-blue-600 hover:bg-blue-500 text-[var(--white)] font-semibold px-4 py-2 rounded-lg text-sm transition">
+                Manage Facilities &rarr;
+            </a>
+        </div>
+    </div>
+
+    <!-- Division Positions -->
     {% if grouped %}
     <div class="space-y-6">
         {% for season_name, divisions in grouped.items %}
         <div>
-            <h2 class="text-lg font-semibold text-white mb-3">{{ season_name }}</h2>
+            <h2 class="text-lg font-semibold text-[var(--white)] mb-3">{{ season_name }} &mdash; Positions</h2>
             <div class="grid grid-cols-1 gap-4">
                 {% for division in divisions %}
-                <div class="bg-slate-800 border border-slate-700 rounded-lg">
-                    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700">
-                        <h3 class="font-semibold text-white">{{ division.name }}</h3>
-                        <a href="{% url 'edit_division' division.id %}" class="text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded transition">Edit Division</a>
+                <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg">
+                    <div class="flex items-center justify-between px-5 py-4 border-b border-[var(--slate-700)]">
+                        <h3 class="font-semibold text-[var(--white)]">{{ division.name }}</h3>
+                        <a href="{% url 'edit_division' division.id %}" class="text-xs bg-amber-600 hover:bg-amber-500 text-[var(--white)] px-3 py-1 rounded transition">Edit Division</a>
                     </div>
                     <div class="p-5">
                         <form method="POST">
                             {% csrf_token %}
+                            <input type="hidden" name="action" value="update_positions">
                             <input type="hidden" name="division_id" value="{{ division.id }}">
                             <div class="flex flex-wrap gap-2 mb-4">
                                 {% for code, label in position_choices %}
-                                <label class="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 cursor-pointer hover:border-emerald-500 transition has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/5">
+                                <label class="flex items-center gap-2 bg-[var(--slate-900)] border border-[var(--slate-700)] rounded-lg px-3 py-2 cursor-pointer hover:border-emerald-500 transition has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/5">
                                     <input type="checkbox" name="positions" value="{{ code }}"
-                                           class="rounded border-slate-600 text-emerald-500 focus:ring-emerald-500"
+                                           class="rounded border-[var(--slate-600)] text-emerald-500 focus:ring-emerald-500"
                                            {% if code in division.allowed_positions or not division.allowed_positions %}checked{% endif %}>
-                                    <span class="text-slate-200 text-sm font-medium">{{ label }}</span>
+                                    <span class="text-[var(--slate-200)] text-sm font-medium">{{ label }}</span>
                                 </label>
                                 {% endfor %}
                             </div>
-                            <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-5 py-2 rounded-lg transition text-sm">Save</button>
+                            <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-[var(--white)] font-semibold px-5 py-2 rounded-lg transition text-sm">Save Positions</button>
                         </form>
                     </div>
                 </div>
@@ -44,9 +89,9 @@
         {% endfor %}
     </div>
     {% else %}
-    <div class="bg-slate-800 border border-slate-700 rounded-lg py-16 text-center">
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg py-16 text-center">
         <div class="text-4xl mb-4">&#x26a1;</div>
-        <p class="text-slate-400">No divisions found. Create a season and add divisions first.</p>
+        <p class="text-[var(--slate-400)]">No divisions found. Create a season and add divisions first.</p>
     </div>
     {% endif %}
 </div>

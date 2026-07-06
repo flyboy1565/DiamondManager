@@ -1,4 +1,6 @@
 from django.urls import path
+from django.views.generic.base import RedirectView
+from django.contrib.auth.views import LogoutView
 from .views import (
     CreateOrganizationView, 
     CreateSeasonView, 
@@ -18,10 +20,12 @@ from .views import (
     CreatePlayerView,
     CreateGameView,
     AlertsView,
+    FacilityManageView,
 )
 
 urlpatterns = [
     path('', LandingPortalView.as_view(), name='landing_portal'),
+    path('logout/', LogoutView.as_view(next_page='landing_portal'), name='logout'),
     path('portal/login/', PortalLoginView.as_view(), name='portal_login'),
     path('portal/register-org/', PortalRegisterOrgView.as_view(), name='portal_register_org'),
     path('portal/verify-token/', PortalVerifyTokenView.as_view(), name='portal_verify_token'),
@@ -39,5 +43,7 @@ urlpatterns = [
     path('admin/team/<uuid:team_id>/players/new/', CreatePlayerView.as_view(), name='create_player'),
     path('admin/team/<uuid:team_id>/games/new/', CreateGameView.as_view(), name='create_game'),
     path('admin/alerts/', AlertsView.as_view(), name='alerts'),
-    path('admin/positions/', DivisionPositionsView.as_view(), name='division_positions'),
+    path('admin/settings/', DivisionPositionsView.as_view(), name='org_settings'),
+    path('admin/positions/', RedirectView.as_view(pattern_name='org_settings', permanent=True)),
+    path('admin/facilities/', FacilityManageView.as_view(), name='manage_facilities'),
 ]

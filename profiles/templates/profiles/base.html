@@ -5,20 +5,100 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}DiamondManager Hub{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* ── CSS Design Tokens (default: Slate dark theme) ── */
+        :root {
+            --slate-50: #f8fafc;
+            --slate-100: #f1f5f9;
+            --slate-200: #e2e8f0;
+            --slate-300: #cbd5e1;
+            --slate-400: #94a3b8;
+            --slate-500: #64748b;
+            --slate-600: #475569;
+            --slate-700: #334155;
+            --slate-700-30: rgba(51,65,85,0.3);
+            --slate-700-50: rgba(51,65,85,0.5);
+            --slate-800: #1e293b;
+            --slate-800-80: rgba(30,41,59,0.8);
+            --slate-900: #0f172a;
+            --slate-950: #020617;
+            --white: #ffffff;
+        }
+
+        /* ── Theme: Light ── */
+        body.theme-light {
+            --slate-50: #0f172a;
+            --slate-100: #1e293b;
+            --slate-200: #475569;
+            --slate-300: #64748b;
+            --slate-400: #94a3b8;
+            --slate-500: #64748b;
+            --slate-600: #cbd5e1;
+            --slate-700: #e2e8f0;
+            --slate-700-30: rgba(226,232,240,0.3);
+            --slate-700-50: rgba(226,232,240,0.5);
+            --slate-800: #ffffff;
+            --slate-800-80: rgba(255,255,255,0.8);
+            --slate-900: #f8fafc;
+            --slate-950: #f1f5f9;
+            --white: #0f172a;
+        }
+
+        /* ── Theme: Forest ── */
+        body.theme-forest {
+            --slate-900: #0a1a0f;
+            --slate-800: #122a1a;
+            --slate-800-80: rgba(18,42,26,0.8);
+            --slate-700: #1a3d24;
+            --slate-700-30: rgba(26,61,36,0.3);
+            --slate-700-50: rgba(26,61,36,0.5);
+            --slate-600: #2a5a38;
+            --slate-950: #06120a;
+        }
+
+        /* ── Theme: Ocean ── */
+        body.theme-ocean {
+            --slate-900: #0a1429;
+            --slate-800: #0f1f3d;
+            --slate-800-80: rgba(15,31,61,0.8);
+            --slate-700: #1a2d52;
+            --slate-700-30: rgba(26,45,82,0.3);
+            --slate-700-50: rgba(26,45,82,0.5);
+            --slate-600: #2a4070;
+            --slate-950: #060e1e;
+        }
+
+        /* ── Select option styling (fixes white-on-white dropdown in Chrome) ── */
+        select option { background: var(--slate-800); color: var(--slate-100); }
+    </style>
 </head>
-<body class="bg-slate-900 text-slate-100 font-sans h-screen overflow-hidden flex flex-col">
+<body class="bg-[var(--slate-900)] text-[var(--slate-100)] font-sans h-screen overflow-hidden flex flex-col">
 
     <!-- Top Bar -->
-    <header class="bg-slate-800 border-b border-slate-700 px-6 h-14 flex items-center justify-between shrink-0 shadow-lg z-20">
+    <header class="bg-[var(--slate-800)] border-b border-[var(--slate-700)] px-6 h-14 flex items-center justify-between shrink-0 shadow-lg z-20">
         <div class="flex items-center gap-4">
             <span class="text-xl">&#x1f48e;</span>
             <a href="{% url 'dashboard' %}" class="text-lg font-bold tracking-wider text-emerald-400">DiamondManager</a>
         </div>
         <div class="flex items-center gap-4 text-sm">
             {% if user.is_authenticated %}
-                <span class="text-slate-400">{{ user.profile.organization.name|default:user.username }}</span>
-                <span class="text-slate-600">|</span>
-                <form method="POST" action="{% url 'admin:logout' %}" class="inline">
+                <div class="flex items-center gap-2">
+                    <span class="text-[var(--white)] font-medium">{{ user.get_full_name|default:user.username }}</span>
+                    <span class="bg-emerald-500/10 text-emerald-300 text-[10px] font-bold px-1.5 py-0.5 rounded border border-emerald-500/20">{{ user.profile.get_role_display }}</span>
+                    <span class="text-[var(--slate-500)] text-xs">{{ user.profile.organization.name|default:"" }}</span>
+                </div>
+                <span class="text-[var(--slate-600)]">|</span>
+                <div class="relative" id="theme-picker">
+                    <button onclick="toggleThemePicker()" class="text-[var(--slate-400)] hover:text-[var(--white)] transition px-1 text-base leading-none" title="Change theme">&#x1f3a8;</button>
+                    <div id="theme-menu" class="absolute right-0 top-full mt-1.5 bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg shadow-xl py-1 min-w-[110px] hidden z-30">
+                        <button onclick="setTheme('slate')" class="w-full text-left px-3 py-1.5 text-sm text-[var(--slate-300)] hover:bg-[var(--slate-700)] hover:text-[var(--white)] transition" data-theme="slate">&#x1f5a4; Slate</button>
+                        <button onclick="setTheme('light')" class="w-full text-left px-3 py-1.5 text-sm text-[var(--slate-300)] hover:bg-[var(--slate-700)] hover:text-[var(--white)] transition" data-theme="light">&#x2600;&#xfe0f; Light</button>
+                        <button onclick="setTheme('forest')" class="w-full text-left px-3 py-1.5 text-sm text-[var(--slate-300)] hover:bg-[var(--slate-700)] hover:text-[var(--white)] transition" data-theme="forest">&#x1f333; Forest</button>
+                        <button onclick="setTheme('ocean')" class="w-full text-left px-3 py-1.5 text-sm text-[var(--slate-300)] hover:bg-[var(--slate-700)] hover:text-[var(--white)] transition" data-theme="ocean">&#x1f30a; Ocean</button>
+                    </div>
+                </div>
+                <span class="text-[var(--slate-600)]">|</span>
+                <form method="POST" action="{% url 'logout' %}" class="inline">
                     {% csrf_token %}
                     <button type="submit" class="text-rose-400 hover:text-rose-300 transition bg-transparent border-0 p-0 cursor-pointer font-medium text-sm">
                         Sign Out
@@ -31,33 +111,33 @@
     <div class="flex flex-1 overflow-hidden">
         <!-- Sidebar -->
         {% if user.is_authenticated %}
-        <aside class="w-56 bg-slate-800 border-r border-slate-700 overflow-y-auto shrink-0 hidden lg:block">
+        <aside class="w-56 bg-[var(--slate-800)] border-r border-[var(--slate-700)] overflow-y-auto shrink-0 hidden lg:block">
             <nav class="py-4 px-3 space-y-1">
-                <a href="{% url 'dashboard' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition text-sm font-medium">
+                <a href="{% url 'dashboard' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[var(--slate-300)] hover:bg-[var(--slate-700)] hover:text-[var(--white)] transition text-sm font-medium">
                     <span>&#x1f4ca;</span>
                     Dashboard
                 </a>
                 {% if user.profile.role in 'ORG_OWNER,ORG_ADMIN' %}
-                <div class="pt-3 pb-1 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Administration</div>
-                <a href="{% url 'alerts' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition text-sm font-medium">
+                <div class="pt-3 pb-1 px-3 text-xs font-semibold text-[var(--slate-500)] uppercase tracking-wider">Administration</div>
+                <a href="{% url 'alerts' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[var(--slate-300)] hover:bg-[var(--slate-700)] hover:text-[var(--white)] transition text-sm font-medium">
                     <span>&#x1f514;</span>
                     Alerts
                 </a>
-                <a href="{% url 'division_positions' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition text-sm font-medium">
+                <a href="{% url 'org_settings' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[var(--slate-300)] hover:bg-[var(--slate-700)] hover:text-[var(--white)] transition text-sm font-medium">
                     <span>&#x26a1;</span>
-                    Positions
+                    Settings
                 </a>
-                <a href="{% url 'create_season' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition text-sm font-medium">
+                <a href="{% url 'create_season' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[var(--slate-300)] hover:bg-[var(--slate-700)] hover:text-[var(--white)] transition text-sm font-medium">
                     <span>&#x1f4c6;</span>
                     New Season
                 </a>
-                <a href="{% url 'create_org' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition text-sm font-medium">
+                <a href="{% url 'create_org' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[var(--slate-300)] hover:bg-[var(--slate-700)] hover:text-[var(--white)] transition text-sm font-medium">
                     <span>&#x2699;&#xfe0f;</span>
                     Organization
                 </a>
                 {% endif %}
-                <div class="pt-3 pb-1 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Scheduling</div>
-                <a href="{% url 'schedule_event' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition text-sm font-medium">
+                <div class="pt-3 pb-1 px-3 text-xs font-semibold text-[var(--slate-500)] uppercase tracking-wider">Scheduling</div>
+                <a href="{% url 'schedule_event' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[var(--slate-300)] hover:bg-[var(--slate-700)] hover:text-[var(--white)] transition text-sm font-medium">
                     <span>&#x1f4c5;</span>
                     Schedule Event
                 </a>
@@ -66,7 +146,7 @@
         {% endif %}
 
         <!-- Main Content -->
-        <main class="flex-1 overflow-y-auto bg-slate-900 p-6">
+        <main class="flex-1 overflow-y-auto bg-[var(--slate-900)] p-6">
             {% block content %}{% endblock %}
         </main>
     </div>
@@ -89,7 +169,7 @@
                 {{ message }}
             </div>
 
-            <button type="button" onclick="dismissToast(this.closest('.toast-message'))" class="shrink-0 text-gray-400 hover:text-white transition">
+            <button type="button" onclick="dismissToast(this.closest('.toast-message'))" class="shrink-0 text-[var(--slate-400)] hover:text-[var(--white)] transition">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
         </div>
@@ -121,6 +201,29 @@
                 toast.remove();
             }, 500);
         }
+
+        /* ── Theme Picker ── */
+        function getTheme() { return localStorage.getItem('dm-theme') || 'slate'; }
+        function setTheme(name) {
+            document.body.className = document.body.className.replace(/theme-\w+/g, '').trim();
+            if (name !== 'slate') document.body.classList.add('theme-' + name);
+            localStorage.setItem('dm-theme', name);
+            document.getElementById('theme-menu').classList.add('hidden');
+        }
+        function toggleThemePicker() {
+            document.getElementById('theme-menu').classList.toggle('hidden');
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            var saved = getTheme();
+            if (saved !== 'slate') document.body.classList.add('theme-' + saved);
+        });
+        document.addEventListener('click', function(e) {
+            var picker = document.getElementById('theme-picker');
+            if (picker && !picker.contains(e.target)) {
+                var menu = document.getElementById('theme-menu');
+                if (menu) menu.classList.add('hidden');
+            }
+        });
     </script>
 </body>
 </html>

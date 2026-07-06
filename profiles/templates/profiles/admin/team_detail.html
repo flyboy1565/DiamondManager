@@ -6,97 +6,97 @@
 <div class="max-w-7xl mx-auto">
     <div class="flex items-center justify-between mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-white">{{ team.name }}</h1>
-            <p class="text-slate-400">Division: {{ team.division.name }} | Season: {{ team.season.name }}</p>
+            <h1 class="text-2xl font-bold text-[var(--white)]">{{ team.name }}</h1>
+            <p class="text-[var(--slate-400)]">Division: {{ team.division.name }} | Season: {{ team.season.name }}</p>
         </div>
         <div class="flex gap-2">
-            <a href="{% url 'create_coach' team.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-sm transition">+ Coach</a>
-            <a href="{% url 'create_player' team.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-sm transition">+ Player</a>
-            <a href="{% url 'create_game' team.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-sm transition">+ Game</a>
-            <a href="{{ events_url }}" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-lg text-sm transition">Events</a>
+            <a href="{% url 'create_coach' team.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-[var(--white)] px-3 py-2 rounded-lg text-sm transition">+ Coach</a>
+            <a href="{% url 'create_player' team.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-[var(--white)] px-3 py-2 rounded-lg text-sm transition">+ Player</a>
+            <a href="{% url 'create_game' team.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-[var(--white)] px-3 py-2 rounded-lg text-sm transition">+ Game</a>
+            <a href="{{ events_url }}" class="bg-blue-600 hover:bg-blue-500 text-[var(--white)] px-3 py-2 rounded-lg text-sm transition">Events</a>
         </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
         <!-- Team Summary -->
-        <div class="lg:col-span-3 bg-slate-800 border border-slate-700 rounded-lg p-5">
-            <h3 class="text-lg font-semibold text-white mb-4">Team Summary</h3>
+        <div class="lg:col-span-3 bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-5">
+            <h3 class="text-lg font-semibold text-[var(--white)] mb-4">Team Summary</h3>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div class="bg-slate-900 rounded-lg p-4">
-                    <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">Manager</p>
-                    <p class="text-white font-medium">{% if manager_names %}{{ manager_names|join:", " }}{% else %}<span class="text-slate-400">Not assigned</span>{% endif %}</p>
+                <div class="bg-[var(--slate-900)] rounded-lg p-4">
+                    <p class="text-[var(--slate-400)] text-xs uppercase tracking-wider mb-1">Manager</p>
+                    <p class="text-[var(--white)] font-medium">{% if manager_names %}{{ manager_names|join:", " }}{% else %}<span class="text-[var(--slate-400)]">Not assigned</span>{% endif %}</p>
                 </div>
-                <div class="bg-slate-900 rounded-lg p-4">
-                    <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">Coaches</p>
-                    <p class="text-white font-medium">{{ coach_names|join:", "|default:"None" }}</p>
+                <div class="bg-[var(--slate-900)] rounded-lg p-4">
+                    <p class="text-[var(--slate-400)] text-xs uppercase tracking-wider mb-1">Coaches</p>
+                    <p class="text-[var(--white)] font-medium">{{ coach_names|join:", "|default:"None" }}</p>
                 </div>
-                <div class="bg-slate-900 rounded-lg p-4">
-                    <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">Players</p>
-                    <p class="text-white font-medium">{{ player_count }}</p>
+                <div class="bg-[var(--slate-900)] rounded-lg p-4">
+                    <p class="text-[var(--slate-400)] text-xs uppercase tracking-wider mb-1">Players</p>
+                    <p class="text-[var(--white)] font-medium">{{ player_count }}</p>
                 </div>
-                <div class="bg-slate-900 rounded-lg p-4">
-                    <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">Record</p>
-                    <p class="text-white font-medium font-mono">{{ record.wins }}-{{ record.losses }}-{{ record.ties }}</p>
+                <div class="bg-[var(--slate-900)] rounded-lg p-4">
+                    <p class="text-[var(--slate-400)] text-xs uppercase tracking-wider mb-1">Record</p>
+                    <p class="text-[var(--white)] font-medium font-mono">{{ record.wins }}-{{ record.losses }}-{{ record.ties }}</p>
                 </div>
             </div>
         </div>
 
         <!-- Coaching Staff -->
-        <div class="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-5">
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-lg font-semibold text-white">Staff</h3>
-                <a href="{% url 'create_coach' team.id %}" class="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 transition">+ Coach</a>
+                <h3 class="text-lg font-semibold text-[var(--white)]">Staff</h3>
+                <a href="{% url 'create_coach' team.id %}" class="text-xs bg-emerald-600 text-[var(--white)] px-2 py-1 rounded hover:bg-emerald-700 transition">+ Coach</a>
             </div>
             {% if coaches %}
             <div class="space-y-2">
                 {% for c in coaches %}
-                <div class="bg-slate-900 border border-slate-700 rounded p-3">
-                    <div class="font-medium text-slate-200 text-sm">{{ c.user.get_full_name|default:c.user.username }}</div>
-                    <div class="text-slate-400 text-xs">{{ c.membership.role }}</div>
-                    {% if c.players %}<div class="text-slate-500 text-xs mt-1">{{ c.players|length }} player{% if c.players|length != 1 %}s{% endif %}</div>{% endif %}
+                <div class="bg-[var(--slate-900)] border border-[var(--slate-700)] rounded p-3">
+                    <div class="font-medium text-[var(--slate-200)] text-sm">{{ c.user.get_full_name|default:c.user.username }}</div>
+                    <div class="text-[var(--slate-400)] text-xs">{{ c.membership.role }}</div>
+                    {% if c.players %}<div class="text-[var(--slate-500)] text-xs mt-1">{{ c.players|length }} player{% if c.players|length != 1 %}s{% endif %}</div>{% endif %}
                 </div>
                 {% endfor %}
             </div>
             {% else %}
-            <p class="text-slate-400 text-sm">No staff added yet.</p>
+            <p class="text-[var(--slate-400)] text-sm">No staff added yet.</p>
             {% endif %}
         </div>
     </div>
 
     <!-- Players -->
-    <div class="bg-slate-800 border border-slate-700 rounded-lg mb-6">
-        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700 cursor-pointer" onclick="document.getElementById('players-list').classList.toggle('hidden'); document.getElementById('players-toggle').classList.toggle('rotate-180')">
-            <h3 class="text-lg font-semibold text-white">Players ({{ player_count }})</h3>
-            <svg id="players-toggle" class="w-5 h-5 text-slate-300 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg mb-6">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-[var(--slate-700)] cursor-pointer" onclick="document.getElementById('players-list').classList.toggle('hidden'); document.getElementById('players-toggle').classList.toggle('rotate-180')">
+            <h3 class="text-lg font-semibold text-[var(--white)]">Players ({{ player_count }})</h3>
+            <svg id="players-toggle" class="w-5 h-5 text-[var(--slate-300)] transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
             </svg>
         </div>
         <div id="players-list" class="hidden p-5">
             {% if players %}
             <table class="w-full text-sm">
-                <thead class="text-slate-400 text-xs uppercase">
+                <thead class="text-[var(--slate-400)] text-xs uppercase">
                     <tr><th class="text-left py-2 font-semibold">Name</th><th class="text-left py-2 font-semibold">Guardian</th></tr>
                 </thead>
-                <tbody class="divide-y divide-slate-700">
+                <tbody class="divide-y divide-[var(--slate-700)]">
                     {% for p in players %}
-                    <tr class="hover:bg-slate-700/30 transition">
-                        <td class="py-2.5 text-white font-medium">{{ p.first_name }} {{ p.last_name }}</td>
-                        <td class="py-2.5 text-slate-400">{{ p.guardian.get_full_name|default:p.guardian.username }}</td>
+                    <tr class="hover:bg-[var(--slate-700-30)] transition">
+                        <td class="py-2.5 text-[var(--white)] font-medium">{{ p.first_name }} {{ p.last_name }}</td>
+                        <td class="py-2.5 text-[var(--slate-400)]">{{ p.guardian.get_full_name|default:p.guardian.username }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <p class="text-slate-400 mb-3">No players yet.</p>
-            <a href="{% url 'create_player' team.id %}" class="inline-block bg-emerald-600 text-white px-4 py-2 rounded text-sm transition hover:bg-emerald-500">Add Player</a>
+            <p class="text-[var(--slate-400)] mb-3">No players yet.</p>
+            <a href="{% url 'create_player' team.id %}" class="inline-block bg-emerald-600 text-[var(--white)] px-4 py-2 rounded text-sm transition hover:bg-emerald-500">Add Player</a>
             {% endif %}
         </div>
     </div>
 
     <!-- Events -->
-    <div class="bg-slate-800 border border-slate-700 rounded-lg">
-        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700">
-            <h3 class="text-lg font-semibold text-white">Upcoming & Completed Events</h3>
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-[var(--slate-700)]">
+            <h3 class="text-lg font-semibold text-[var(--white)]">Upcoming & Completed Events</h3>
             <a href="{{ events_url }}" class="text-sm text-blue-400 hover:text-blue-300 font-semibold">Manage Events</a>
         </div>
         <div class="p-5">
@@ -104,16 +104,16 @@
             <div class="space-y-2">
                 {% for e in events %}
                 {% if e.home_team %}<a href="{% url 'game_detail' e.id %}" class="block">{% endif %}
-                <div class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 flex items-center justify-between gap-4 hover:bg-slate-700/30 transition">
+                <div class="bg-[var(--slate-900)] border border-[var(--slate-700)] rounded-lg px-4 py-3 flex items-center justify-between gap-4 hover:bg-[var(--slate-700-30)] transition">
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2">
-                            <span class="text-white font-medium">
+                            <span class="text-[var(--white)] font-medium">
                                 {% if e.title %}{{ e.title }}{% else %}{{ e.date_time|date:"M d, Y H:i" }}{% endif %}
                             </span>
                             {% if e.home_team %}<span class="text-xs text-sky-400">&#x1f3be;</span>{% endif %}
-                            {% if e.event_type %}<span class="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">{{ e.get_event_type_display }}</span>{% endif %}
+                            {% if e.event_type %}<span class="text-xs bg-[var(--slate-700)] text-[var(--slate-300)] px-2 py-0.5 rounded">{{ e.get_event_type_display }}</span>{% endif %}
                         </div>
-                        <div class="text-slate-400 text-xs mt-0.5">
+                        <div class="text-[var(--slate-400)] text-xs mt-0.5">
                             {% if e.location %}{{ e.location }} &middot; {% endif %}
                             {% if e.home_team %}
                                 {% if e.home_team == team %}
@@ -127,10 +127,10 @@
                     <div class="flex items-center gap-3 shrink-0">
                         {% if e.is_completed %}
                             {% if e.home_score is not None %}<span class="text-emerald-300 font-mono font-semibold text-sm">{{ e.home_score }}-{{ e.away_score }}</span>{% endif %}
-                            <span class="text-xs bg-slate-700 text-emerald-300 px-2 py-0.5 rounded-full">Final</span>
+                            <span class="text-xs bg-[var(--slate-700)] text-emerald-300 px-2 py-0.5 rounded-full">Final</span>
                         {% else %}
-                            {% if e.home_score is not None %}<span class="text-slate-400 font-mono text-xs">{{ e.home_score }}-{{ e.away_score }}</span>{% endif %}
-                            <span class="text-xs bg-blue-700 text-slate-200 px-2 py-0.5 rounded-full">Upcoming</span>
+                            {% if e.home_score is not None %}<span class="text-[var(--slate-400)] font-mono text-xs">{{ e.home_score }}-{{ e.away_score }}</span>{% endif %}
+                            <span class="text-xs bg-blue-700 text-[var(--slate-200)] px-2 py-0.5 rounded-full">Upcoming</span>
                         {% endif %}
                     </div>
                 </div>
@@ -138,8 +138,8 @@
                 {% endfor %}
             </div>
             {% else %}
-            <p class="text-slate-400">No events scheduled yet.</p>
-            <a href="{{ events_url }}" class="mt-3 inline-block bg-emerald-600 text-white px-4 py-2 rounded text-sm transition hover:bg-emerald-500">Create Event</a>
+            <p class="text-[var(--slate-400)]">No events scheduled yet.</p>
+            <a href="{{ events_url }}" class="mt-3 inline-block bg-emerald-600 text-[var(--white)] px-4 py-2 rounded text-sm transition hover:bg-emerald-500">Create Event</a>
             {% endif %}
         </div>
     </div>

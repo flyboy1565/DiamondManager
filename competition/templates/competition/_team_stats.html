@@ -1,0 +1,103 @@
+<div class="space-y-6">
+    <!-- Per-inning scores -->
+    <div>
+        <h3 class="text-sm font-bold text-[var(--slate-300)] mb-3">Score by Inning</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead>
+                    <tr class="text-[var(--slate-500)] text-xs uppercase border-b border-[var(--slate-700)]">
+                        <th class="pb-2 pr-4">Inning</th>
+                        {% for inn_num, inn_data in innings_data.items %}
+                        <th class="pb-2 px-3 text-center">{{ inn_num }}</th>
+                        {% endfor %}
+                        <th class="pb-2 pl-3 text-center">R</th>
+                    </tr>
+                </thead>
+                <tbody class="text-[var(--slate-300)]">
+                    <tr class="border-b border-[var(--slate-700)]">
+                        <td class="py-2 pr-4 font-semibold">Home</td>
+                        {% for inn_num, inn_data in innings_data.items %}
+                        <td class="py-2 px-3 text-center">{{ inn_data.home|default:"0" }}</td>
+                        {% endfor %}
+                        <td class="py-2 pl-3 text-center font-bold text-emerald-400">{{ game.home_score }}</td>
+                    </tr>
+                    <tr>
+                        <td class="py-2 pr-4 font-semibold">Away</td>
+                        {% for inn_num, inn_data in innings_data.items %}
+                        <td class="py-2 px-3 text-center">{{ inn_data.away|default:"0" }}</td>
+                        {% endfor %}
+                        <td class="py-2 pl-3 text-center font-bold text-[var(--slate-300)]">{{ game.away_score }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Batter stats -->
+    <div>
+        <h3 class="text-sm font-bold text-[var(--slate-300)] mb-3">Batting</h3>
+        {% if batters %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead>
+                    <tr class="text-[var(--slate-500)] text-xs uppercase border-b border-[var(--slate-700)]">
+                        <th class="pb-2 pr-3">Player</th>
+                        <th class="pb-2 px-3 text-center">AB</th>
+                        <th class="pb-2 px-3 text-center">H</th>
+                        <th class="pb-2 px-3 text-center">SO</th>
+                        <th class="pb-2 px-3 text-center">BB</th>
+                        <th class="pb-2 px-3 text-center">AVG</th>
+                    </tr>
+                </thead>
+                <tbody class="text-[var(--slate-300)]">
+                    {% for pid, b in batters.items %}
+                    <tr class="border-b border-[var(--slate-700)]">
+                        <td class="py-2 pr-3 font-medium">{{ b.name }}</td>
+                        <td class="py-2 px-3 text-center">{{ b.ab }}</td>
+                        <td class="py-2 px-3 text-center">{{ b.hits }}</td>
+                        <td class="py-2 px-3 text-center">{{ b.strikeouts }}</td>
+                        <td class="py-2 px-3 text-center">{{ b.walks }}</td>
+                        <td class="py-2 px-3 text-center">{{ b.avg }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-[var(--slate-500)] text-sm text-center py-4">No batting data yet.</p>
+        {% endif %}
+    </div>
+
+    <!-- Pitcher stats -->
+    <div>
+        <h3 class="text-sm font-bold text-[var(--slate-300)] mb-3">Pitching</h3>
+        {% if pitchers %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead>
+                    <tr class="text-[var(--slate-500)] text-xs uppercase border-b border-[var(--slate-700)]">
+                        <th class="pb-2 pr-3">Player</th>
+                        <th class="pb-2 px-3 text-center">PC</th>
+                        <th class="pb-2 px-3 text-center">SO</th>
+                        <th class="pb-2 px-3 text-center">H</th>
+                        <th class="pb-2 px-3 text-center">BB</th>
+                    </tr>
+                </thead>
+                <tbody class="text-[var(--slate-300)]">
+                    {% for pid, p in pitchers.items %}
+                    <tr class="border-b border-[var(--slate-700)]">
+                        <td class="py-2 pr-3 font-medium">{{ p.name }}</td>
+                        <td class="py-2 px-3 text-center">{{ p.pitch_count }}</td>
+                        <td class="py-2 px-3 text-center">{{ p.strikeouts }}</td>
+                        <td class="py-2 px-3 text-center">{{ p.hits_allowed }}</td>
+                        <td class="py-2 px-3 text-center">{{ p.walks_allowed }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-[var(--slate-500)] text-sm text-center py-4">No pitching data yet.</p>
+        {% endif %}
+    </div>
+</div>

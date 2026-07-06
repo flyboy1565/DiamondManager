@@ -1,0 +1,62 @@
+{% load static %}
+<div class="flex justify-center">
+    <svg viewBox="0 0 240 260" class="w-56 h-60 sm:w-64 sm:h-72" xmlns="http://www.w3.org/2000/svg">
+        <!-- Grass / field background -->
+        <ellipse cx="120" cy="155" rx="110" ry="105" fill="var(--slate-800)" stroke="var(--slate-600)" stroke-width="1.5"/>
+
+        <!-- Infield dirt (rotated square) -->
+        <polygon points="120,55 195,130 120,205 45,130" fill="var(--slate-700)" stroke="var(--slate-600)" stroke-width="1.5"/>
+
+        <!-- Base lines -->
+        <line x1="120" y1="55" x2="195" y2="130" stroke="var(--slate-500)" stroke-width="1"/>
+        <line x1="195" y1="130" x2="120" y2="205" stroke="var(--slate-500)" stroke-width="1"/>
+        <line x1="120" y1="205" x2="45" y2="130" stroke="var(--slate-500)" stroke-width="1"/>
+        <line x1="45" y1="130" x2="120" y2="55" stroke="var(--slate-500)" stroke-width="1"/>
+
+        <!-- Bases -->
+        <!-- 2nd base (top) -->
+        <rect x="113" y="48" width="14" height="14" rx="2" fill="var(--slate-900)" stroke="var(--slate-400)" stroke-width="1"/>
+
+        <!-- 1st base (right) -->
+        <rect x="188" y="123" width="14" height="14" rx="2" fill="var(--slate-900)" stroke="var(--slate-400)" stroke-width="1"/>
+
+        <!-- 3rd base (left) -->
+        <rect x="38" y="123" width="14" height="14" rx="2" fill="var(--slate-900)" stroke="var(--slate-400)" stroke-width="1"/>
+
+        <!-- Home plate (bottom) -->
+        <polygon points="113,205 127,205 127,215 120,222 113,215" fill="var(--slate-900)" stroke="var(--slate-400)" stroke-width="1"/>
+
+        <!-- Pitcher's mound -->
+        <circle cx="120" cy="130" r="8" fill="var(--slate-600)" stroke="var(--slate-500)" stroke-width="1"/>
+
+        <!-- Runner on 2nd -->
+        {% if runners.second %}
+        <g>
+            <circle cx="120" cy="55" r="11" fill="var(--slate-900)" stroke="#fbbf24" stroke-width="2.5"/>
+            <text x="120" y="59" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="bold">{{ runners.second.player_name|make_list|first }}</text>
+        </g>
+        {% endif %}
+
+        <!-- Runner on 1st -->
+        {% if runners.first %}
+        <g>
+            <circle cx="195" cy="130" r="11" fill="var(--slate-900)" stroke="#fbbf24" stroke-width="2.5"/>
+            <text x="195" y="134" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="bold">{{ runners.first.player_name|make_list|first }}</text>
+        </g>
+        {% endif %}
+
+        <!-- Runner on 3rd -->
+        {% if runners.third %}
+        <g>
+            <circle cx="45" cy="130" r="11" fill="var(--slate-900)" stroke="#fbbf24" stroke-width="2.5"/>
+            <text x="45" y="134" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="bold">{{ runners.third.player_name|make_list|first }}</text>
+        </g>
+        {% endif %}
+
+        <!-- Batter box label -->
+        <text x="120" y="240" text-anchor="middle" fill="var(--slate-500)" font-size="9" font-weight="600">BATTER</text>
+        {% if current_batter and current_batter.player_name %}
+        <text x="120" y="252" text-anchor="middle" fill="var(--slate-300)" font-size="10" font-weight="bold">{{ current_batter.player_name }}</text>
+        {% endif %}
+    </svg>
+</div>

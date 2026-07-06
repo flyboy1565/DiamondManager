@@ -16,7 +16,7 @@ from django.apps import apps
 
 from leagues.league_blueprints import LEAGUE_BLUEPRINTS
 from .forms import OrganizationForm, SeasonForm, RosterImportForm, DivisionSetupForm, DivisionEditForm, TeamForm, AlertForm, DEFENSIVE_POSITION_CHOICES
-from leagues.models import Division, Season, Team
+from leagues.models import Division, Season, Team, Facility
 from competition.models import Alert
 
 import uuid  # For generating unique access codes for teams
@@ -203,7 +203,7 @@ class AlertsView(LoginRequiredMixin, TemplateView):
         return redirect('alerts')
 
 
-# DIVISION POSITIONS VIEW
+# ORGANIZATION SETTINGS VIEW
 class DivisionPositionsView(LoginRequiredMixin, TemplateView):
     template_name = 'profiles/admin/division_positions.html'
 
@@ -211,7 +211,9 @@ class DivisionPositionsView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         profile = self.request.user.profile
         organization = profile.organization
+        context['organization'] = organization
         context['position_choices'] = DEFENSIVE_POSITION_CHOICES
+        context['facility_count'] = Facility.objects.filter(organization=organization).count()
 
         if organization:
             seasons = organization.seasons.filter(is_active=True).order_by('-year', '-season')
@@ -227,15 +229,82 @@ class DivisionPositionsView(LoginRequiredMixin, TemplateView):
     def post(self, request, *args, **kwargs):
         profile = request.user.profile
         if profile.role not in ['ORG_OWNER', 'ORG_ADMIN']:
-            messages.error(request, "Only admins can update positions.")
-            return redirect('division_positions')
+            messages.error(request, "Only admins can update settings.")
+            return redirect('org_settings')
 
-        division = get_object_or_404(Division, id=request.POST.get('division_id'))
-        positions = request.POST.getlist('positions')
-        division.allowed_positions = positions
-        division.save()
-        messages.success(request, f"Positions updated for {division.name}.")
-        return redirect('division_positions')
+        action = request.POST.get('action')
+
+        if action == 'update_org_settings':
+            try:
+                max_events = int(request.POST.get('max_events_per_team_per_week', 10))
+                if max_events < 1:
+                    raise ValueError
+                profile.organization.max_events_per_team_per_week = max_events
+                profile.organization.save()
+                messages.success(request, "League settings updated.")
+            except (ValueError, TypeError):
+                messages.error(request, "Max events must be a positive number.")
+
+        elif action == 'update_positions':
+            division = get_object_or_404(Division, id=request.POST.get('division_id'))
+            positions = request.POST.getlist('positions')
+            division.allowed_positions = positions
+            division.save()
+            messages.success(request, f"Positions updated for {division.name}.")
+
+        return redirect('org_settings')
+
+
+# FACILITY MANAGEMENT VIEW
+class FacilityManageView(LoginRequiredMixin, TemplateView):
+    template_name = 'profiles/admin/manage_facilities.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        profile = self.request.user.profile
+        org = profile.organization
+        context['organization'] = org
+        context['facilities'] = Facility.objects.filter(organization=org).order_by('name', 'field_name')
+        return context
+
+    def post(self, request, *args, **kwargs):
+        profile = request.user.profile
+        if profile.role not in ['ORG_OWNER', 'ORG_ADMIN']:
+            messages.error(request, "Only admins can manage facilities.")
+            return redirect('manage_facilities')
+
+        action = request.POST.get('action')
+
+        if action == 'add_facility':
+            name = request.POST.get('name', '').strip()
+            if not name:
+                messages.error(request, "Facility name is required.")
+                return redirect('manage_facilities')
+            Facility.objects.create(
+                organization=profile.organization,
+                name=name,
+                address=request.POST.get('address', '').strip(),
+                field_name=request.POST.get('field_name', '').strip(),
+                notes=request.POST.get('notes', '').strip(),
+            )
+            messages.success(request, f"Facility \"{name}\" added.")
+
+        elif action == 'edit_facility':
+            facility = get_object_or_404(Facility, id=request.POST.get('facility_id'), organization=profile.organization)
+            facility.name = request.POST.get('name', facility.name).strip()
+            facility.address = request.POST.get('address', '').strip()
+            facility.field_name = request.POST.get('field_name', '').strip()
+            facility.notes = request.POST.get('notes', '').strip()
+            facility.save()
+            messages.success(request, f"Facility \"{facility.name}\" updated.")
+
+        elif action == 'delete_facility':
+            facility = get_object_or_404(Facility, id=request.POST.get('facility_id'), organization=profile.organization)
+            name = str(facility)
+            facility.delete()
+            messages.success(request, f"Facility \"{name}\" deleted.")
+
+        return redirect('manage_facilities')
 
 
 # 1. STEP ONE: INITIALIZE ORGANIZATION
@@ -392,10 +461,17 @@ class CreateTeamView(LoginRequiredMixin, CreateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        grouped = []
-
-        context['grouped_divisions'] = grouped
+        division = get_object_or_404(Division, id=self.kwargs['division_id'])
+        context['division'] = division
         return context
+
+    def form_valid(self, form):
+        division = get_object_or_404(Division, id=self.kwargs['division_id'])
+        team = form.save(commit=False)
+        team.division = division
+        team.access_code = uuid.uuid4().hex[:12]
+        team.save()
+        return redirect('season_detail', season_id=division.season.id)
     
 class TeamDetailView(LoginRequiredMixin, FormView):
     template_name = 'profiles/admin/team_detail.html'

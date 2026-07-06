@@ -1,0 +1,127 @@
+{% extends 'profiles/base.html' %}
+{% block title %}Manage Facilities - DiamondManager{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-8 py-6">
+    <h1 class="text-2xl font-bold text-[var(--white)] mb-2">Manage Facilities</h1>
+    <p class="text-[var(--slate-400)] text-sm mb-6">{{ organization.name }}</p>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="rounded-lg px-4 py-3 text-sm font-medium
+                {% if message.tags == 'error' %}
+                    bg-red-900/50 text-red-200 border border-red-700
+                {% else %}
+                    bg-emerald-900/50 text-emerald-200 border border-emerald-700
+                {% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- Add Facility Form -->
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-xl p-6">
+        <h3 class="text-lg font-semibold text-[var(--white)] mb-4">Add Facility</h3>
+        <form method="POST" action="{% url 'manage_facilities' %}" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_facility">
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-[var(--slate-300)] mb-1">Facility Name *</label>
+                <input type="text" name="name" required
+                    class="w-full rounded-lg bg-[var(--slate-900)] border border-[var(--slate-700)] text-[var(--white)] px-3 py-2 placeholder-[var(--slate-500)] focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-[var(--slate-300)] mb-1">Address</label>
+                <input type="text" name="address"
+                    class="w-full rounded-lg bg-[var(--slate-900)] border border-[var(--slate-700)] text-[var(--white)] px-3 py-2 placeholder-[var(--slate-500)] focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-[var(--slate-300)] mb-1">Field Name</label>
+                <input type="text" name="field_name" placeholder="e.g. Field 1, North Diamond"
+                    class="w-full rounded-lg bg-[var(--slate-900)] border border-[var(--slate-700)] text-[var(--white)] px-3 py-2 placeholder-[var(--slate-500)] focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-[var(--slate-300)] mb-1">Notes</label>
+                <textarea name="notes" rows="2"
+                    class="w-full rounded-lg bg-[var(--slate-900)] border border-[var(--slate-700)] text-[var(--white)] px-3 py-2 placeholder-[var(--slate-500)] focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            </div>
+            <div class="md:col-span-2">
+                <button type="submit"
+                    class="bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg px-4 py-2 transition-colors">
+                    Add Facility
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Existing Facilities -->
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-xl p-6">
+        <h3 class="text-lg font-semibold text-[var(--white)] mb-4">
+            Facilities <span class="text-sm font-normal text-[var(--slate-400)]">({{ facilities|length }} total)</span>
+        </h3>
+
+        {% if facilities %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                    <thead class="text-[var(--slate-400)] border-b border-[var(--slate-700)]">
+                        <tr>
+                            <th class="py-2 pr-4 font-medium">Name</th>
+                            <th class="py-2 pr-4 font-medium">Field</th>
+                            <th class="py-2 pr-4 font-medium">Address</th>
+                            <th class="py-2 pr-4 font-medium">Notes</th>
+                            <th class="py-2 font-medium">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-[var(--slate-700)]">
+                        {% for facility in facilities %}
+                        <tr class="group">
+                            <form method="POST" action="{% url 'manage_facilities' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="edit_facility">
+                                <input type="hidden" name="facility_id" value="{{ facility.id }}">
+                                <td class="py-2 pr-4">
+                                    <input type="text" name="name" value="{{ facility.name }}" required
+                                        class="w-full bg-transparent border border-transparent group-hover:border-[var(--slate-600)] rounded px-1 py-0.5 text-[var(--white)] focus:bg-[var(--slate-900)] focus:border-blue-500 focus:outline-none">
+                                </td>
+                                <td class="py-2 pr-4">
+                                    <input type="text" name="field_name" value="{{ facility.field_name }}"
+                                        class="w-full bg-transparent border border-transparent group-hover:border-[var(--slate-600)] rounded px-1 py-0.5 text-[var(--white)] focus:bg-[var(--slate-900)] focus:border-blue-500 focus:outline-none">
+                                </td>
+                                <td class="py-2 pr-4">
+                                    <input type="text" name="address" value="{{ facility.address }}"
+                                        class="w-full bg-transparent border border-transparent group-hover:border-[var(--slate-600)] rounded px-1 py-0.5 text-[var(--white)] focus:bg-[var(--slate-900)] focus:border-blue-500 focus:outline-none">
+                                </td>
+                                <td class="py-2 pr-4">
+                                    <input type="text" name="notes" value="{{ facility.notes }}"
+                                        class="w-full bg-transparent border border-transparent group-hover:border-[var(--slate-600)] rounded px-1 py-0.5 text-[var(--white)] focus:bg-[var(--slate-900)] focus:border-blue-500 focus:outline-none">
+                                </td>
+                                <td class="py-2 whitespace-nowrap">
+                                    <button type="submit"
+                                        class="text-blue-400 hover:text-blue-300 text-xs font-medium mr-2">Save</button>
+                                    <button type="submit" form="delete-{{ facility.id }}"
+                                        class="text-red-400 hover:text-red-300 text-xs font-medium"
+                                        onclick="return confirm('Delete this facility?')">Delete</button>
+                                </td>
+                            </form>
+                            <form id="delete-{{ facility.id }}" method="POST" action="{% url 'manage_facilities' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="delete_facility">
+                                <input type="hidden" name="facility_id" value="{{ facility.id }}">
+                            </form>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-[var(--slate-400)] text-sm">No facilities yet. Add your first facility above.</p>
+        {% endif %}
+    </div>
+
+    <div class="text-center">
+        <a href="{% url 'org_settings' %}"
+            class="text-[var(--slate-400)] hover:text-[var(--white)] text-sm transition-colors">
+            &larr; Back to Settings
+        </a>
+    </div>
+</div>
+{% endblock %}

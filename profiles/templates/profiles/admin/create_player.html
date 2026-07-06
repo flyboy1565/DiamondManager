@@ -4,25 +4,25 @@
 
 {% block content %}
 <div class="max-w-2xl mx-auto">
-    <h1 class="text-2xl font-bold text-white mb-2">Add Player</h1>
-    <p class="text-slate-400 mb-6">Add a player to {{ team.name }}.</p>
+    <h1 class="text-2xl font-bold text-[var(--white)] mb-2">Add Player</h1>
+    <p class="text-[var(--slate-400)] mb-6">Add a player to {{ team.name }}.</p>
 
-    <div class="bg-slate-800 border border-slate-700 rounded-lg p-6">
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-6">
         <form method="POST" class="space-y-4">
             {% csrf_token %}
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">First Name</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">First Name</label>
                 {{ form.first_name }}
             </div>
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Last Name</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Last Name</label>
                 {{ form.last_name }}
             </div>
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">Guardian (optional)</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Guardian (optional)</label>
                 {{ form.guardian }}
             </div>
-            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-lg transition">Add Player</button>
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-[var(--white)] font-semibold py-2.5 rounded-lg transition">Add Player</button>
         </form>
     </div>
 </div>

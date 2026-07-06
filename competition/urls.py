@@ -4,6 +4,8 @@ from . import views
 urlpatterns = [
     # Game detail with lineup
     path('game/<uuid:game_id>/', views.GameDetailView.as_view(), name='game_detail'),
+    # Live scoring interface
+    path('game/<uuid:game_id>/score/', views.GameScoreView.as_view(), name='game_score'),
     # Event listing and creation
     path('team/<uuid:team_id>/events/', views.TeamEventsListView.as_view(), name='team_events'),
     path('team/<uuid:team_id>/events/new/', views.CreateTeamEventView.as_view(), name='create_event'),
@@ -21,4 +23,7 @@ urlpatterns = [
     # Organization/league-level events
     path('org/<uuid:org_id>/events/', views.OrganizationEventsListView.as_view(), name='organization_events'),
     path('org/<uuid:org_id>/events/new/', views.CreateOrganizationEventView.as_view(), name='create_organization_event'),
+
+    # Admin schedule view
+    path('admin/schedule/<int:division_id>/', views.AdminScheduleView.as_view(), name='admin_schedule'),
 ]

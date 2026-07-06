@@ -4,15 +4,15 @@
 
 {% block content %}
 <div class="max-w-4xl mx-auto">
-    <h1 class="text-2xl font-bold text-white mb-2">Create Division</h1>
-    <p class="text-slate-400 mb-6">Pick a template and select divisions for {{ season.name }}.</p>
+    <h1 class="text-2xl font-bold text-[var(--white)] mb-2">Create Division</h1>
+    <p class="text-[var(--slate-400)] mb-6">Pick a template and select divisions for {{ season.name }}.</p>
 
-    <div class="bg-slate-800 border border-slate-700 rounded-lg p-6">
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-6">
         <form method="POST" class="space-y-6">
             {% csrf_token %}
 
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-2">Division Template</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-2">Division Template</label>
                 {{ form.preset_type }}
                 {% if form.preset_type.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.preset_type.errors }}</p>{% endif %}
             </div>
@@ -21,12 +21,12 @@
                 {% if form.selected_divisions.errors %}<p class="text-rose-400 text-sm mb-4">{{ form.selected_divisions.errors }}</p>{% endif %}
                 {% for template_key, template_data in blueprints.items %}
                 <div class="template-block mb-4" data-template="{{ template_key }}" style="display: none;">
-                    <h3 class="text-base font-semibold text-white mb-3">{{ template_data.label }}</h3>
+                    <h3 class="text-base font-semibold text-[var(--white)] mb-3">{{ template_data.label }}</h3>
                     <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {% for division_name in template_data.divisions %}
-                        <label class="flex items-center gap-3 rounded-lg border border-slate-700 p-3 hover:border-emerald-500 transition cursor-pointer">
+                        <label class="flex items-center gap-3 rounded-lg border border-[var(--slate-700)] p-3 hover:border-emerald-500 transition cursor-pointer">
                             <input type="checkbox" name="selected_divisions" value="{{ division_name }}" class="h-4 w-4 text-emerald-500 focus:ring-emerald-500 rounded" />
-                            <span class="text-slate-200 text-sm">{{ division_name }}</span>
+                            <span class="text-[var(--slate-200)] text-sm">{{ division_name }}</span>
                         </label>
                         {% endfor %}
                     </div>
@@ -36,12 +36,12 @@
 
             <div id="custom-template-block" style="display: none;">
                 <div class="mb-4">
-                    <label class="block text-sm font-semibold text-slate-300 mb-1.5">Custom Division Name</label>
+                    <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Custom Division Name</label>
                     {{ form.custom_name }}
                     {% if form.custom_name.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.custom_name.errors }}</p>{% endif %}
                 </div>
                 <div>
-                    <label class="block text-sm font-semibold text-slate-300 mb-1.5">Notes</label>
+                    <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Notes</label>
                     {{ form.notes }}
                     {% if form.notes.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.notes.errors }}</p>{% endif %}
                 </div>
@@ -53,7 +53,7 @@
             </div>
             {% endif %}
 
-            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-lg transition">Save Divisions</button>
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-[var(--white)] font-semibold py-2.5 rounded-lg transition">Save Divisions</button>
         </form>
     </div>
 </div>

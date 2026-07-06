@@ -66,6 +66,7 @@ class TeamEvent(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, null=True, blank=True, related_name='events')
     division = models.ForeignKey(Division, on_delete=models.CASCADE, null=True, blank=True, related_name='events')
     team = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True, related_name='team_events')
+    counts_against_limit = models.BooleanField(default=True, help_text="If unchecked, this event does not count toward the team's weekly event limit")
     
     # Event details
     event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES)
@@ -147,6 +148,7 @@ class TeamEvent(models.Model):
                 date_time=self.date_time,
                 location=self.location,
                 created_by=self.created_by,
+                counts_against_limit=self.counts_against_limit,
                 status=self.status,
                 opponent_team=self.opponent_team,
                 home_score=self.home_score,

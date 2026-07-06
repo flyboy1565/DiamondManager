@@ -4,33 +4,33 @@
 
 {% block content %}
 <div class="max-w-3xl mx-auto">
-    <h1 class="text-2xl font-bold text-white mb-2">Create Team</h1>
-    <p class="text-slate-400 mb-6">Set up a new team.</p>
+    <h1 class="text-2xl font-bold text-[var(--white)] mb-2">Create Team</h1>
+    <p class="text-[var(--slate-400)] mb-6">Set up a new team.</p>
 
-    <div class="bg-slate-800 border border-slate-700 rounded-lg p-6">
+    <div class="bg-[var(--slate-800)] border border-[var(--slate-700)] rounded-lg p-6">
         <div class="mb-5">
-            <label class="block text-sm font-semibold text-slate-300 mb-1.5">Division</label>
-            <div class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-slate-100">{{ division.name }}</div>
+            <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">Division</label>
+            <div class="bg-[var(--slate-900)] border border-[var(--slate-700)] rounded-lg px-4 py-2.5 text-[var(--slate-100)]">{{ division.name }}</div>
         </div>
 
         <form method="POST" enctype="multipart/form-data" class="space-y-5">
             {% csrf_token %}
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">{{ form.name.label }}</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">{{ form.name.label }}</label>
                 {{ form.name }}
                 {% if form.name.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.name.errors }}</p>{% endif %}
             </div>
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">{{ form.color.label }}</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">{{ form.color.label }}</label>
                 {{ form.color }}
                 {% if form.color.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.color.errors }}</p>{% endif %}
             </div>
             <div>
-                <label class="block text-sm font-semibold text-slate-300 mb-1.5">{{ form.icon.label }}</label>
+                <label class="block text-sm font-semibold text-[var(--slate-300)] mb-1.5">{{ form.icon.label }}</label>
                 {{ form.icon }}
                 {% if form.icon.errors %}<p class="text-rose-400 text-sm mt-1">{{ form.icon.errors }}</p>{% endif %}
             </div>
-            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-lg transition">Create Team</button>
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-[var(--white)] font-semibold py-2.5 rounded-lg transition">Create Team</button>
         </form>
     </div>
 </div>
@@ -38,7 +38,7 @@
 <script>
     document.querySelectorAll('input, select, textarea').forEach(field => {
         if (field.type !== 'checkbox') {
-            field.classList.add('w-full', 'bg-slate-900', 'border', 'border-slate-700', 'rounded-lg', 'px-4', 'py-2.5', 'text-slate-100', 'focus:outline-none', 'focus:border-emerald-500', 'transition');
+            field.classList.add('w-full', 'bg-[var(--slate-900)]', 'border', 'border-[var(--slate-700)]', 'rounded-lg', 'px-4', 'py-2.5', 'text-[var(--slate-100)]', 'focus:outline-none', 'focus:border-emerald-500', 'transition');
         }
     });
 </script>
