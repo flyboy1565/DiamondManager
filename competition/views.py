@@ -577,6 +577,18 @@ class AdminScheduleView(LoginRequiredMixin, FormView):
         type_labels = dict(TeamEvent.EVENT_TYPE_CHOICES)
         type_label = type_labels.get(event_type, event_type)
 
+        # Create a Game model for scoring-capable event types
+        game_types = ['TEAM_GAME', 'TEAM_SCRIMMAGE', 'LEAGUE_TOURNAMENT', 'LEAGUE_PLAYOFF']
+        game = None
+        if event_type in game_types:
+            game = Game.objects.create(
+                season=division.season,
+                home_team=home_team,
+                away_team=away_team,
+                date_time=date_time,
+                location=location,
+            )
+
         # Create event for home team
         home_event = TeamEvent.objects.create(
             scope='TEAM',
@@ -593,6 +605,7 @@ class AdminScheduleView(LoginRequiredMixin, FormView):
             created_by=self.request.user,
             status='SCHEDULED',
             is_home_game=True,
+            game=game,
         )
 
         # Create event for away team
@@ -611,6 +624,7 @@ class AdminScheduleView(LoginRequiredMixin, FormView):
             created_by=self.request.user,
             status='SCHEDULED',
             is_home_game=False,
+            game=game,
         )
 
         messages.success(self.request, f"{type_label} scheduled: {home_team.name} vs {away_team.name}")

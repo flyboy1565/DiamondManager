@@ -1244,9 +1244,410 @@ def clone_lineup(request, game_id: UUID, data: schemas.CloneLineupSchema):
     ]
 
 
-@router.get("/games/{game_id}/scoreboard", response=schemas.GameSchema)
+@router.get("/games/{game_id}/scoreboard", response=schemas.GameScoreDetailSchema)
 def get_game_scoreboard(request, game_id: UUID):
-    return get_game(request, game_id)
+    game = get_object_or_404(Game, id=game_id)
+    return {
+        **game.__dict__,
+        "home_team_name": game.home_team.name,
+        "away_team_name": game.away_team.name,
+        "scoring_data": game.scoring_data or {},
+    }
+
+
+# ------------------------------------------------------------------
+# Scheduling API endpoints
+# ------------------------------------------------------------------
+
+
+@router.get("/teams/{team_id}/events", response=List[schemas.TeamEventSchema])
+def list_team_events(request, team_id: UUID):
+    from .models import TeamEvent
+    events = TeamEvent.objects.filter(team_id=team_id).select_related(
+        'team', 'opponent_team', 'division'
+    ).order_by('-date_time')
+    return [
+        {
+            "id": e.id,
+            "scope": e.scope,
+            "event_type": e.event_type,
+            "title": e.title,
+            "description": e.description,
+            "date_time": e.date_time,
+            "location": e.location,
+            "status": e.status,
+            "is_home_game": e.is_home_game,
+            "home_score": e.home_score,
+            "away_score": e.away_score,
+            "counts_against_limit": e.counts_against_limit,
+            "is_live": e.is_live,
+            "current_inning": e.current_inning or 1,
+            "is_top_inning": e.is_top_inning if e.is_top_inning is not None else True,
+            "outs": e.outs or 0,
+            "balls": e.balls or 0,
+            "strikes": e.strikes or 0,
+            "pitch_count": e.pitch_count or 0,
+            "opponent_team_id": e.opponent_team_id,
+            "opponent_team_name": e.opponent_team.name if e.opponent_team else None,
+            "team_id": e.team_id,
+            "team_name": e.team.name if e.team else None,
+            "division_id": e.division_id,
+            "division_name": e.division.name if e.division else None,
+            "game_id": e.game_id,
+        }
+        for e in events
+    ]
+
+
+@router.post("/teams/{team_id}/events", response={201: schemas.TeamEventSchema, 403: dict, 429: dict})
+def create_team_event(request, team_id: UUID, data: schemas.TeamEventCreateSchema):
+    from .models import TeamEvent
+    from leagues.models import Team
+    from .scheduling import team_can_add_events, get_week_range
+
+    team = get_object_or_404(Team, id=team_id)
+
+    # Permission check
+    from .permissions import can_create_event
+    if not can_create_event(request.user, 'TEAM', data.event_type, team=team):
+        return 403, {"message": "Unauthorized: You cannot create events for this team."}
+
+    # Weekly limit check (only for countable events)
+    if data.counts_against_limit:
+        week_start, week_end = get_week_range(data.date_time)
+        allowed, current, max_allowed = team_can_add_events(team, 1, week_start, week_end)
+        if not allowed:
+            return 429, {
+                "message": f"Team at weekly limit ({current}/{max_allowed}).",
+                "current": current,
+                "max_allowed": max_allowed,
+            }
+
+    event = TeamEvent.objects.create(
+        scope='TEAM',
+        team=team,
+        event_type=data.event_type,
+        title=data.title,
+        description=data.description or "",
+        date_time=data.date_time,
+        location=data.location or "",
+        opponent_team_id=data.opponent_team_id,
+        is_home_game=data.is_home_game,
+        counts_against_limit=data.counts_against_limit,
+        practice_focus=data.practice_focus,
+        attendance_required=data.attendance_required,
+        created_by=request.user,
+        organization=team.division.season.organization,
+        division=team.division,
+    )
+    return 201, {
+        "id": event.id,
+        "scope": event.scope,
+        "event_type": event.event_type,
+        "title": event.title,
+        "description": event.description,
+        "date_time": event.date_time,
+        "location": event.location,
+        "status": event.status,
+        "is_home_game": event.is_home_game,
+        "home_score": event.home_score,
+        "away_score": event.away_score,
+        "counts_against_limit": event.counts_against_limit,
+        "is_live": event.is_live,
+        "current_inning": 1,
+        "is_top_inning": True,
+        "outs": 0,
+        "balls": 0,
+        "strikes": 0,
+        "pitch_count": 0,
+        "opponent_team_id": event.opponent_team_id,
+        "opponent_team_name": team.name if event.opponent_team_id else None,
+        "team_id": event.team_id,
+        "team_name": team.name,
+        "division_id": team.division_id,
+        "division_name": team.division.name,
+        "game_id": None,
+    }
+
+
+@router.put("/events/{event_id}", response={200: schemas.TeamEventSchema, 403: dict})
+def update_team_event(request, event_id: UUID, data: schemas.TeamEventUpdateSchema):
+    from .models import TeamEvent
+    from .permissions import can_edit_event
+
+    event = get_object_or_404(TeamEvent, id=event_id)
+    if not can_edit_event(request.user, event):
+        return 403, {"message": "Unauthorized: You cannot edit this event."}
+
+    update_data = data.dict(exclude_unset=True)
+    for attr, value in update_data.items():
+        setattr(event, attr, value)
+    event.save()
+
+    return 200, {
+        "id": event.id,
+        "scope": event.scope,
+        "event_type": event.event_type,
+        "title": event.title,
+        "description": event.description,
+        "date_time": event.date_time,
+        "location": event.location,
+        "status": event.status,
+        "is_home_game": event.is_home_game,
+        "home_score": event.home_score,
+        "away_score": event.away_score,
+        "counts_against_limit": event.counts_against_limit,
+        "is_live": event.is_live,
+        "current_inning": event.current_inning or 1,
+        "is_top_inning": event.is_top_inning if event.is_top_inning is not None else True,
+        "outs": event.outs or 0,
+        "balls": event.balls or 0,
+        "strikes": event.strikes or 0,
+        "pitch_count": event.pitch_count or 0,
+        "opponent_team_id": event.opponent_team_id,
+        "opponent_team_name": event.opponent_team.name if event.opponent_team else None,
+        "team_id": event.team_id,
+        "team_name": event.team.name if event.team else None,
+        "division_id": event.division_id,
+        "division_name": event.division.name if event.division else None,
+        "game_id": event.game_id,
+    }
+
+
+@router.delete("/events/{event_id}", response={200: dict, 403: dict})
+def delete_team_event(request, event_id: UUID):
+    from .models import TeamEvent
+    from .permissions import can_delete_event
+
+    event = get_object_or_404(TeamEvent, id=event_id)
+    if not can_delete_event(request.user, event):
+        return 403, {"message": "Unauthorized: You cannot delete this event."}
+
+    event.delete()
+    return 200, {"success": True}
+
+
+@router.get("/divisions/{division_id}/weekly-status", response=schemas.WeeklyStatusSchema)
+def get_weekly_status(request, division_id: int, year: int = None, month: int = None, day: int = None):
+    from datetime import datetime
+    from .scheduling import get_week_range, team_event_count
+    from leagues.models import Division
+
+    division = get_object_or_404(Division, id=division_id)
+    org = division.season.organization
+    max_allowed = org.max_events_per_team_per_week
+
+    # Determine reference date
+    if year and month and day:
+        ref_date = datetime(year, month, day, tzinfo=timezone.now().tzinfo)
+    else:
+        ref_date = timezone.now()
+
+    week_start, week_end = get_week_range(ref_date)
+    teams = division.teams.all()
+
+    team_statuses = []
+    for team in teams:
+        count = team_event_count(team, week_start, week_end)
+        team_statuses.append({
+            "team_id": team.id,
+            "team_name": team.name,
+            "current_count": count,
+            "max_allowed": max_allowed,
+            "remaining": max(0, max_allowed - count),
+        })
+
+    return {
+        "week_start": week_start.isoformat(),
+        "week_end": week_end.isoformat(),
+        "max_allowed": max_allowed,
+        "teams": team_statuses,
+    }
+
+
+@router.post("/admin/schedule-game", response={201: dict, 429: dict})
+def schedule_game(request, data: schemas.ScheduleGameSchema):
+    from .models import TeamEvent, Game
+    from leagues.models import Team
+    from .scheduling import team_can_add_events, get_week_range, get_location_conflicts
+    from django.contrib import messages
+
+    home_team = get_object_or_404(Team, id=data.home_team_id)
+    away_team = get_object_or_404(Team, id=data.away_team_id)
+    division = home_team.division
+
+    # Weekly limit check for both teams
+    week_start, week_end = get_week_range(data.date_time)
+    for team, label in [(home_team, "Home"), (away_team, "Away")]:
+        allowed, current, max_allowed = team_can_add_events(team, 1, week_start, week_end)
+        if not allowed:
+            return 429, {
+                "message": f"{label} team {team.name} at weekly limit ({current}/{max_allowed}).",
+                "team_id": str(team.id),
+                "current": current,
+                "max_allowed": max_allowed,
+            }
+
+    # Create Game model for scoring
+    game = Game.objects.create(
+        season=division.season,
+        home_team=home_team,
+        away_team=away_team,
+        date_time=data.date_time,
+        location=data.location or "",
+    )
+
+    # Create paired TeamEvents
+    type_labels = dict(TeamEvent.EVENT_TYPE_CHOICES)
+    type_label = type_labels.get(data.event_type, data.event_type)
+
+    home_event = TeamEvent.objects.create(
+        scope='TEAM',
+        organization=division.season.organization,
+        division=division,
+        team=home_team,
+        opponent_team=away_team,
+        event_type=data.event_type,
+        title=f"{home_team.name} vs {away_team.name}",
+        description=f"{type_label}: {home_team.name} vs {away_team.name}",
+        date_time=data.date_time,
+        location=data.location or "",
+        counts_against_limit=data.counts_against_limit,
+        created_by=request.user,
+        status='SCHEDULED',
+        is_home_game=True,
+        game=game,
+    )
+
+    away_event = TeamEvent.objects.create(
+        scope='TEAM',
+        organization=division.season.organization,
+        division=division,
+        team=away_team,
+        opponent_team=home_team,
+        event_type=data.event_type,
+        title=f"{away_team.name} vs {home_team.name}",
+        description=f"{type_label}: {away_team.name} @ {home_team.name}",
+        date_time=data.date_time,
+        location=data.location or "",
+        counts_against_limit=data.counts_against_limit,
+        created_by=request.user,
+        status='SCHEDULED',
+        is_home_game=False,
+        game=game,
+    )
+
+    def _event_to_dict(e):
+        return {
+            "id": str(e.id),
+            "event_type": e.event_type,
+            "title": e.title,
+            "description": e.description,
+            "date_time": e.date_time.isoformat(),
+            "location": e.location,
+            "status": e.status,
+            "is_home_game": e.is_home_game,
+            "counts_against_limit": e.counts_against_limit,
+            "team_id": str(e.team_id),
+            "team_name": e.team.name,
+            "opponent_team_id": str(e.opponent_team_id) if e.opponent_team_id else None,
+            "opponent_team_name": e.opponent_team.name if e.opponent_team else None,
+            "game_id": str(e.game_id) if e.game_id else None,
+        }
+
+    return 201, {
+        "events": [_event_to_dict(home_event), _event_to_dict(away_event)],
+        "game_id": str(game.id),
+    }
+
+
+@router.get("/location-conflicts", response=List[schemas.LocationConflictSchema])
+def get_location_conflicts_api(
+    request,
+    location: str,
+    date: str,
+    division_id: int,
+):
+    from datetime import datetime as dt
+    from .scheduling import get_location_conflicts
+
+    date_obj = dt.strptime(date, "%Y-%m-%d").date()
+    from leagues.models import Division
+    division = get_object_or_404(Division, id=division_id)
+
+    ref_dt = timezone.make_aware(dt.combine(date_obj, dt.min.time()))
+    conflicts = get_location_conflicts(location, ref_dt, division)
+
+    return [
+        {
+            "id": e.id,
+            "team_name": e.team.name if e.team else "",
+            "opponent_team_name": e.opponent_team.name if e.opponent_team else None,
+            "date_time": e.date_time,
+            "location": e.location,
+            "event_type": e.event_type,
+            "title": e.title,
+        }
+        for e in conflicts
+    ]
+
+
+@router.get("/organizations/{org_id}/settings", response=schemas.OrgSettingsSchema)
+def get_org_settings(request, org_id: UUID):
+    from leagues.models import Organization
+    org = get_object_or_404(Organization, id=org_id)
+    return {"max_events_per_team_per_week": org.max_events_per_team_per_week}
+
+
+@router.put("/organizations/{org_id}/settings", response={200: schemas.OrgSettingsSchema, 403: dict})
+def update_org_settings(request, org_id: UUID, data: schemas.OrgSettingsSchema):
+    from leagues.models import Organization
+    org = get_object_or_404(Organization, id=org_id)
+
+    if request.user.profile.role not in ['ADMIN', 'ORG_OWNER', 'ORG_ADMIN']:
+        return 403, {"message": "Unauthorized: Only organization admins can update settings."}
+
+    org.max_events_per_team_per_week = data.max_events_per_team_per_week
+    org.save()
+    return 200, {"max_events_per_team_per_week": org.max_events_per_team_per_week}
+
+
+@router.post("/games/{game_id}/start", response={200: schemas.GameSchema, 403: dict})
+def start_game(request, game_id: UUID):
+    game = get_object_or_404(Game, id=game_id)
+    if not _can_score(request, game):
+        return 403, {"message": "Unauthorized: You do not have scoring permissions."}
+
+    _init_scoring_data(game)
+    game.is_live = True
+    game.save()
+
+    return {
+        **game.__dict__,
+        "home_team_name": game.home_team.name,
+        "away_team_name": game.away_team.name,
+    }
+
+
+@router.post("/games/{game_id}/end", response={200: schemas.GameSchema, 403: dict})
+def end_game(request, game_id: UUID, data: schemas.EndGameSchema):
+    game = get_object_or_404(Game, id=game_id)
+    if not _can_score(request, game):
+        return 403, {"message": "Unauthorized: You do not have scoring permissions."}
+
+    if data and data.home_score is not None:
+        game.home_score = data.home_score
+    if data and data.away_score is not None:
+        game.away_score = data.away_score
+
+    game.is_completed = True
+    game.save()
+
+    return {
+        **game.__dict__,
+        "home_team_name": game.home_team.name,
+        "away_team_name": game.away_team.name,
+    }
 
 
 @router.patch("/games/{game_id}/live-update", response=schemas.GameSchema)

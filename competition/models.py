@@ -75,6 +75,9 @@ class TeamEvent(models.Model):
     date_time = models.DateTimeField()
     location = models.CharField(max_length=255, blank=True)
     
+    # Link to Game model for scoring-capable events (GAME, SCRIMMAGE)
+    game = models.ForeignKey('Game', on_delete=models.SET_NULL, null=True, blank=True, related_name='team_events')
+
     # Creator tracking
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='team_events_created')
     created_at = models.DateTimeField(auto_now_add=True)

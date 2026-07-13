@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('profiles', '0004_alter_player_id'),
+        ('profiles', '0003_alter_player_id_squashed_0004_alter_player_id'),
     ]
 
     operations = [

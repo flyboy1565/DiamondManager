@@ -105,9 +105,16 @@ def create_player(request, data: schemas.PlayerCreateSchema):
 @router.put("/players/{player_id}", response=schemas.PlayerSchema)
 def update_player(request, player_id: int, data: schemas.PlayerUpdateSchema):
     player = get_object_or_404(Player, id=player_id)
-    for attr, value in data.dict(exclude_unset=True).items():
-        setattr(player, attr, value)
+    if data.first_name is not None:
+        player.first_name = data.first_name
+    if data.last_name is not None:
+        player.last_name = data.last_name
     player.save()
+    if data.jersey_number is not None:
+        active_membership = player.team_history.filter(is_active=True).first()
+        if active_membership:
+            active_membership.jersey_number = str(data.jersey_number)
+            active_membership.save()
     return player
 
 @router.delete("/players/{player_id}")
@@ -168,8 +175,8 @@ def _assign_profile_organization_from_team(user, team):
     if not team:
         return
 
-    season = getattr(team, 'season', None)
-    organization = getattr(season, 'organization', None)
+    season = team.division.season if team.division_id else None
+    organization = season.organization if season else None
     if not organization:
         return
 

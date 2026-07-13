@@ -123,7 +123,7 @@ def clone_divisions(request, payload: schemas.CloneDivisionsSchema):
             new_div, created = Division.objects.get_or_create(
                 season=target_season,
                 name=old_div.name,
-                defaults={"notes": old_div.notes, "allowed_positions": old_div.allowed_positions}
+                defaults={"notes": old_div.notes, "preset_type": old_div.preset_type, "allowed_positions": old_div.allowed_positions}
             )
             created_divisions.append(new_div)
 

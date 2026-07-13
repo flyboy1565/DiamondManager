@@ -1,7 +1,7 @@
 from ninja import Schema
 from uuid import UUID
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 class GameSchema(Schema):
     id: UUID
@@ -86,3 +86,122 @@ class LineupEntryUpdateSchema(Schema):
 
 class CloneLineupSchema(Schema):
     source_game_id: UUID
+
+class EndGameSchema(Schema):
+    home_score: Optional[int] = None
+    away_score: Optional[int] = None
+
+# --- Scheduling Schemas ---
+
+class TeamEventSchema(Schema):
+    id: UUID
+    scope: str
+    event_type: str
+    title: str
+    description: Optional[str] = None
+    date_time: datetime
+    location: str
+    status: str
+    is_home_game: Optional[bool] = None
+    home_score: Optional[int] = None
+    away_score: Optional[int] = None
+    counts_against_limit: bool
+    is_live: bool
+    current_inning: int
+    is_top_inning: bool
+    outs: int
+    balls: int
+    strikes: int
+    pitch_count: int
+    opponent_team_id: Optional[UUID] = None
+    opponent_team_name: Optional[str] = None
+    team_id: Optional[UUID] = None
+    team_name: Optional[str] = None
+    division_id: Optional[int] = None
+    division_name: Optional[str] = None
+    game_id: Optional[UUID] = None
+
+class TeamEventCreateSchema(Schema):
+    event_type: str
+    title: str
+    description: Optional[str] = None
+    date_time: datetime
+    location: str = ""
+    opponent_team_id: Optional[UUID] = None
+    is_home_game: Optional[bool] = None
+    counts_against_limit: bool = True
+    practice_focus: Optional[str] = None
+    attendance_required: bool = False
+
+class TeamEventUpdateSchema(Schema):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    date_time: Optional[datetime] = None
+    location: Optional[str] = None
+    status: Optional[str] = None
+    opponent_team_id: Optional[UUID] = None
+    is_home_game: Optional[bool] = None
+    counts_against_limit: Optional[bool] = None
+    home_score: Optional[int] = None
+    away_score: Optional[int] = None
+    practice_focus: Optional[str] = None
+    attendance_required: Optional[bool] = None
+
+class WeeklyTeamStatusSchema(Schema):
+    team_id: UUID
+    team_name: str
+    current_count: int
+    max_allowed: int
+    remaining: int
+
+class WeeklyStatusSchema(Schema):
+    week_start: str
+    week_end: str
+    max_allowed: int
+    teams: List[WeeklyTeamStatusSchema]
+
+class ScheduleGameSchema(Schema):
+    home_team_id: UUID
+    away_team_id: UUID
+    event_type: str = "TEAM_GAME"
+    date_time: datetime
+    location: str = ""
+    counts_against_limit: bool = True
+
+class LocationConflictSchema(Schema):
+    id: UUID
+    team_name: str
+    opponent_team_name: Optional[str] = None
+    date_time: datetime
+    location: str
+    event_type: str
+    title: str
+
+class LocationConflictQuerySchema(Schema):
+    location: str
+    date: str
+    division_id: int
+
+class OrgSettingsSchema(Schema):
+    max_events_per_team_per_week: int = 10
+
+class GameScoreDetailSchema(Schema):
+    id: UUID
+    season_id: UUID
+    home_team_id: UUID
+    away_team_id: UUID
+    home_team_name: str
+    away_team_name: str
+    date_time: datetime
+    location: str
+    home_score: int
+    away_score: int
+    is_live: bool
+    current_inning: int
+    is_top_inning: bool
+    outs: int
+    balls: int
+    strikes: int
+    pitch_count: int
+    is_completed: bool
+    scoring_data: Optional[dict] = None

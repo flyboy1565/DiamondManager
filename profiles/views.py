@@ -112,7 +112,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         if not organization:
             team_membership = self.request.user.memberships.filter(is_active=True).select_related('team__division__season__organization').order_by('-joined_at').first()
             if team_membership:
-                organization = getattr(team_membership.team.season, 'organization', None)
+                organization = team_membership.team.division.season.organization
 
         if profile.role == 'ORG_OWNER':
             role_label = 'Organization Owner'
@@ -492,7 +492,7 @@ class TeamDetailView(LoginRequiredMixin, FormView):
         team.coaches.set(form.cleaned_data['coaches'])
         team.save()
         messages.success(self.request, f"Updated team {team.name}.")
-        return redirect('season_detail', season_id=team.season.id)
+        return redirect('season_detail', season_id=team.division.season.id)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -628,14 +628,20 @@ class CreateGameView(LoginRequiredMixin, FormView):
             # Create a minimal opponent Team if name provided
             opponent_name = data.get('opponent_name')
             if opponent_name:
+                import secrets
+                import string
                 Opponent = apps.get_model('leagues', 'Team')
-                opponent = Opponent.objects.create(name=opponent_name, division=team.division, access_code='')
+                allowed_chars = string.ascii_uppercase + string.digits
+                unique_code = ''.join(secrets.choice(allowed_chars) for _ in range(6))
+                while Opponent.objects.filter(access_code=unique_code).exists():
+                    unique_code = ''.join(secrets.choice(allowed_chars) for _ in range(6))
+                opponent = Opponent.objects.create(name=opponent_name, division=team.division, access_code=unique_code)
                 if data.get('is_home'):
                     away_team = opponent
                 else:
                     home_team = opponent
 
-            Game.objects.create(season=team.season, home_team=home_team, away_team=away_team, date_time=data['date_time'], location=data['location'])
+            Game.objects.create(season=team.division.season, home_team=home_team, away_team=away_team, date_time=data['date_time'], location=data['location'])
             messages.success(request, "Game created.")
             return redirect('team_detail', team_id=team.id)
         return render(request, self.template_name, {'form': form, 'team': team})

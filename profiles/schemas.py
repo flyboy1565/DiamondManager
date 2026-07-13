@@ -65,7 +65,7 @@ class PlayerSchema(Schema):
     team_history: List[PlayerMembershipSchema]
 
 class PlayerCreateSchema(Schema):
-    team_id: UUID
+    team_id: Optional[UUID] = None
     first_name: str
     last_name: str
     jersey_number: Optional[int] = None

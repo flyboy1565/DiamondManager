@@ -1,3 +1,4 @@
+import json
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.apps import apps
@@ -652,3 +653,557 @@ class PermissionViewTestCase(TestCase):
         self.client.force_login(self.coach)
         resp = self.client.get("/competitions/schedule/")
         self.assertNotContains(resp, "Division Events")
+
+
+class GameAPITestCase(TestCase):
+    """TDD: Tests for the live scoring API endpoints (start game, end game)."""
+
+    def setUp(self):
+        Organization = apps.get_model('leagues', 'Organization')
+        Season = apps.get_model('leagues', 'Season')
+        Division = apps.get_model('leagues', 'Division')
+        Team = apps.get_model('leagues', 'Team')
+        Player = apps.get_model('profiles', 'Player')
+        TeamMembership = apps.get_model('profiles', 'TeamMembership')
+
+        self.org = Organization.objects.create(name="Test Org")
+        self.season = Season.objects.create(organization=self.org, season="Spring", year=2026)
+        self.div = Division.objects.create(season=self.season, name="10U")
+        self.home = Team.objects.create(name="Home", division=self.div, access_code="HOME1")
+        self.away = Team.objects.create(name="Away", division=self.div, access_code="AWAY1")
+
+        self.guardian = User.objects.create_user(username="guardian", password="password123")
+        self.player = Player.objects.create(first_name="Test", last_name="Player", guardian=self.guardian)
+
+        # Scorer user with scoring permission
+        self.scorer = User.objects.create_user(
+            username="scorer", password="password123",
+            email="scorer@test.com", first_name="Scorer", last_name="User"
+        )
+        self.scorer.profile.role = "SCORER"
+        self.scorer.profile.organization = self.org
+        self.scorer.profile.save()
+
+        # Parent user without scoring permission
+        self.parent = User.objects.create_user(
+            username="parent", password="password123",
+            email="parent@test.com", first_name="Parent", last_name="User"
+        )
+        self.parent.profile.role = "PARENT"
+        self.parent.profile.save()
+
+        # Create a game (not yet started)
+        from .models import Game
+        self.game = Game.objects.create(
+            season=self.season,
+            home_team=self.home,
+            away_team=self.away,
+            date_time="2026-06-01 10:00:00+00",
+            location="Test Field",
+        )
+
+    def _get_jwt_token(self, user):
+        resp = self.client.post("/api/token/pair", json.dumps({
+            "username": user.username, "password": "password123"
+        }), content_type="application/json")
+        return resp.json()["access"]
+
+    def _auth_header(self, token):
+        return {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+
+    # ------------------------------------------------------------------
+    # Start Game endpoint tests
+    # ------------------------------------------------------------------
+
+    def test_start_game_success(self):
+        """A scorer can start a game — is_live becomes True, scoring_data initialized."""
+        token = self._get_jwt_token(self.scorer)
+        headers = self._auth_header(token)
+        response = self.client.post(f"/api/competition/games/{self.game.id}/start", **headers)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["is_live"])
+        self.assertEqual(data["id"], str(self.game.id))
+
+    def test_start_game_unauthorized(self):
+        """A parent (no scoring role) gets 403."""
+        token = self._get_jwt_token(self.parent)
+        headers = self._auth_header(token)
+        response = self.client.post(f"/api/competition/games/{self.game.id}/start", **headers)
+        self.assertEqual(response.status_code, 403)
+
+    def test_start_game_already_live_is_idempotent(self):
+        """Starting an already-live game returns success without error."""
+        token = self._get_jwt_token(self.scorer)
+        headers = self._auth_header(token)
+        # First start
+        self.client.post(f"/api/competition/games/{self.game.id}/start", **headers)
+        # Second start — should still be 200, not crash
+        response = self.client.post(f"/api/competition/games/{self.game.id}/start", **headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["is_live"])
+
+    # ------------------------------------------------------------------
+    # End Game endpoint tests
+    # ------------------------------------------------------------------
+
+    def test_end_game_success(self):
+        """A scorer can end a game — is_completed becomes True."""
+        token = self._get_jwt_token(self.scorer)
+        headers = self._auth_header(token)
+        # Start it first
+        self.client.post(f"/api/competition/games/{self.game.id}/start", **headers)
+        # Now end it
+        response = self.client.post(
+            f"/api/competition/games/{self.game.id}/end",
+            {},
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["is_completed"])
+
+    def test_end_game_with_scores(self):
+        """Ending a game with final scores updates home/away_score."""
+        token = self._get_jwt_token(self.scorer)
+        headers = self._auth_header(token)
+        self.client.post(f"/api/competition/games/{self.game.id}/start", **headers)
+        payload = {"home_score": 5, "away_score": 3}
+        response = self.client.post(
+            f"/api/competition/games/{self.game.id}/end",
+            payload,
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["home_score"], 5)
+        self.assertEqual(data["away_score"], 3)
+        self.assertTrue(data["is_completed"])
+
+    def test_end_game_unauthorized(self):
+        """A parent (no scoring role) gets 403 when ending a game."""
+        token = self._get_jwt_token(self.parent)
+        headers = self._auth_header(token)
+        response = self.client.post(
+            f"/api/competition/games/{self.game.id}/end",
+            {},
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_end_game_already_completed_is_idempotent(self):
+        """Ending an already-completed game returns success without error."""
+        token = self._get_jwt_token(self.scorer)
+        headers = self._auth_header(token)
+        # Start it first, then end it, then end again
+        self.client.post(f"/api/competition/games/{self.game.id}/start", **headers)
+        self.client.post(
+            f"/api/competition/games/{self.game.id}/end",
+            {},
+            content_type="application/json",
+            **headers
+        )
+        response = self.client.post(
+            f"/api/competition/games/{self.game.id}/end",
+            {},
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["is_completed"])
+
+    # ------------------------------------------------------------------
+    # Scoreboard endpoint tests (enriched with scoring_data)
+    # ------------------------------------------------------------------
+
+    def test_scoreboard_shows_scoring_data(self):
+        """Scoreboard endpoint returns enriched game data including pitchers and runners."""
+        from .models import GameLineupEntry
+        # Create lineup entries so scoring_data gets populated
+        GameLineupEntry.objects.create(
+            game=self.game, team=self.home, player=self.player,
+            batting_order=1, position="P"
+        )
+        # Start the game
+        token = self._get_jwt_token(self.scorer)
+        headers = self._auth_header(token)
+        self.client.post(f"/api/competition/games/{self.game.id}/start", **headers)
+        # Hit scoreboard
+        response = self.client.get(
+            f"/api/competition/games/{self.game.id}/scoreboard",
+            **headers
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        # Should include scoring_data fields
+        self.assertIn("scoring_data", data)
+        self.assertIsNotNone(data["scoring_data"])
+
+
+class SchedulingAPITestCase(TestCase):
+    """TDD: Tests for scheduling API endpoints."""
+
+    def setUp(self):
+        Organization = apps.get_model('leagues', 'Organization')
+        Season = apps.get_model('leagues', 'Season')
+        Division = apps.get_model('leagues', 'Division')
+        Team = apps.get_model('leagues', 'Team')
+
+        self.org = Organization.objects.create(
+            name="Test Org",
+            max_events_per_team_per_week=5
+        )
+        self.season = Season.objects.create(organization=self.org, season="Spring", year=2026)
+        self.div = Division.objects.create(season=self.season, name="10U")
+        self.team_a = Team.objects.create(name="Tigers", division=self.div, access_code="TIGER1")
+        self.team_b = Team.objects.create(name="Bears", division=self.div, access_code="BEARS1")
+
+        # Admin user
+        self.admin = User.objects.create_user(
+            username="admin", password="password123",
+            email="admin@test.com", first_name="Admin", last_name="User"
+        )
+        self.admin.profile.role = "ORG_ADMIN"
+        self.admin.profile.organization = self.org
+        self.admin.profile.save()
+
+        # Coach user
+        self.coach = User.objects.create_user(
+            username="coach", password="password123",
+            email="coach@test.com", first_name="Coach", last_name="User"
+        )
+        self.coach.profile.role = "COACH"
+        self.coach.profile.save()
+        from profiles.models import TeamMembership
+        TeamMembership.objects.create(user=self.coach, team=self.team_a, role="COACH", is_active=True)
+        self.team_a.coaches.add(self.coach)
+
+    def _get_jwt_token(self, user):
+        resp = self.client.post("/api/token/pair", json.dumps({
+            "username": user.username, "password": "password123"
+        }), content_type="application/json")
+        return resp.json()["access"]
+
+    def _auth_header(self, token):
+        return {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+
+    # ------------------------------------------------------------------
+    # TeamEvent CRUD tests
+    # ------------------------------------------------------------------
+
+    def test_list_team_events(self):
+        """Coach can list events for their own team."""
+        from .models import TeamEvent
+        TeamEvent.objects.create(
+            scope='TEAM', team=self.team_a, event_type='TEAM_PRACTICE',
+            title="Test Practice", date_time="2026-06-01 10:00:00+00",
+            created_by=self.coach,
+        )
+        token = self._get_jwt_token(self.coach)
+        headers = self._auth_header(token)
+        response = self.client.get(
+            f"/api/competition/teams/{self.team_a.id}/events",
+            **headers
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["title"], "Test Practice")
+
+    def test_create_team_event(self):
+        """Coach can create an event for their own team."""
+        token = self._get_jwt_token(self.coach)
+        headers = self._auth_header(token)
+        payload = {
+            "event_type": "TEAM_PRACTICE",
+            "title": "New Practice",
+            "date_time": "2026-06-02T10:00:00Z",
+        }
+        response = self.client.post(
+            f"/api/competition/teams/{self.team_a.id}/events",
+            payload,
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(data["title"], "New Practice")
+
+    def test_create_team_event_unauthorized(self):
+        """Coach can't create events for another team."""
+        token = self._get_jwt_token(self.coach)
+        headers = self._auth_header(token)
+        payload = {
+            "event_type": "TEAM_PRACTICE",
+            "title": "Sneaky Practice",
+            "date_time": "2026-06-02T10:00:00Z",
+        }
+        response = self.client.post(
+            f"/api/competition/teams/{self.team_b.id}/events",
+            payload,
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_create_team_event_blocks_when_at_limit(self):
+        """Creating an event blocks with 429 when team is at weekly limit."""
+        from .models import TeamEvent
+        # Fill the week with 5 events (max limit)
+        for i in range(5):
+            TeamEvent.objects.create(
+                scope='TEAM', team=self.team_a, event_type='TEAM_PRACTICE',
+                title=f"Existing Event {i}", date_time=f"2026-06-0{i+1} 10:00:00+00",
+                created_by=self.coach,
+            )
+        token = self._get_jwt_token(self.coach)
+        headers = self._auth_header(token)
+        payload = {
+            "event_type": "TEAM_PRACTICE",
+            "title": "Over Limit",
+            "date_time": "2026-06-06T10:00:00Z",
+        }
+        response = self.client.post(
+            f"/api/competition/teams/{self.team_a.id}/events",
+            payload,
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 429)
+
+    def test_create_team_event_skips_limit_when_not_counting(self):
+        """Creating an event with counts_against_limit=False bypasses the weekly limit."""
+        from .models import TeamEvent
+        # Fill the week with 5 events
+        for i in range(5):
+            TeamEvent.objects.create(
+                scope='TEAM', team=self.team_a, event_type='TEAM_PRACTICE',
+                title=f"Existing Event {i}", date_time=f"2026-06-0{i+1} 10:00:00+00",
+                created_by=self.coach,
+            )
+        token = self._get_jwt_token(self.coach)
+        headers = self._auth_header(token)
+        payload = {
+            "event_type": "TEAM_PRACTICE",
+            "title": "Non-Counting Event",
+            "date_time": "2026-06-06T10:00:00Z",
+            "counts_against_limit": False,
+        }
+        response = self.client.post(
+            f"/api/competition/teams/{self.team_a.id}/events",
+            payload,
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 201)
+
+    def test_update_team_event(self):
+        """Coach can update their own team's event."""
+        from .models import TeamEvent
+        event = TeamEvent.objects.create(
+            scope='TEAM', team=self.team_a, event_type='TEAM_PRACTICE',
+            title="Original", date_time="2026-06-01 10:00:00+00",
+            created_by=self.coach,
+        )
+        token = self._get_jwt_token(self.coach)
+        headers = self._auth_header(token)
+        payload = {"title": "Updated Title"}
+        response = self.client.put(
+            f"/api/competition/events/{event.id}",
+            payload,
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["title"], "Updated Title")
+
+    def test_update_team_event_unauthorized(self):
+        """Coach can't update another team's event."""
+        from .models import TeamEvent
+        event = TeamEvent.objects.create(
+            scope='TEAM', team=self.team_b, event_type='TEAM_PRACTICE',
+            title="Not Yours", date_time="2026-06-01 10:00:00+00",
+            created_by=self.admin,
+        )
+        token = self._get_jwt_token(self.coach)
+        headers = self._auth_header(token)
+        payload = {"title": "Hacked"}
+        response = self.client.put(
+            f"/api/competition/events/{event.id}",
+            payload,
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_delete_team_event(self):
+        """Coach can delete their own team's event."""
+        from .models import TeamEvent
+        event = TeamEvent.objects.create(
+            scope='TEAM', team=self.team_a, event_type='TEAM_PRACTICE',
+            title="Delete Me", date_time="2026-06-01 10:00:00+00",
+            created_by=self.coach,
+        )
+        token = self._get_jwt_token(self.coach)
+        headers = self._auth_header(token)
+        response = self.client.delete(
+            f"/api/competition/events/{event.id}",
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TeamEvent.objects.filter(id=event.id).exists())
+
+    # ------------------------------------------------------------------
+    # Weekly status tests
+    # ------------------------------------------------------------------
+
+    def test_weekly_status_returns_team_counts(self):
+        """Weekly status returns per-team event counts with week range."""
+        from .models import TeamEvent
+        TeamEvent.objects.create(
+            scope='TEAM', team=self.team_a, event_type='TEAM_PRACTICE',
+            title="Countable", date_time="2026-06-02 10:00:00+00",
+            created_by=self.coach,
+            counts_against_limit=True,
+        )
+        token = self._get_jwt_token(self.admin)
+        headers = self._auth_header(token)
+        response = self.client.get(
+            f"/api/competition/divisions/{self.div.id}/weekly-status?year=2026&month=6&day=1",
+            **headers
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("week_start", data)
+        self.assertIn("week_end", data)
+        self.assertEqual(data["max_allowed"], 5)
+        self.assertEqual(len(data["teams"]), 2)
+        for t in data["teams"]:
+            if t["team_id"] == str(self.team_a.id):
+                self.assertEqual(t["current_count"], 1)
+                self.assertEqual(t["remaining"], 4)
+
+    # ------------------------------------------------------------------
+    # Schedule game tests
+    # ------------------------------------------------------------------
+
+    def test_schedule_game_creates_paired_events(self):
+        """Scheduling a game creates two TeamEvents linked by opponent_team."""
+        token = self._get_jwt_token(self.admin)
+        headers = self._auth_header(token)
+        payload = {
+            "home_team_id": str(self.team_a.id),
+            "away_team_id": str(self.team_b.id),
+            "event_type": "TEAM_GAME",
+            "date_time": "2026-06-05T14:00:00Z",
+            "location": "Main Field",
+        }
+        response = self.client.post(
+            "/api/competition/admin/schedule-game",
+            payload,
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(len(data["events"]), 2)
+        # Verify linked opponent
+        home_event = data["events"][0]
+        away_event = data["events"][1]
+        self.assertEqual(home_event["opponent_team_id"], str(self.team_b.id))
+        self.assertEqual(away_event["opponent_team_id"], str(self.team_a.id))
+        # Verify a Game was created
+        self.assertIsNotNone(home_event.get("game_id"))
+
+    def test_schedule_game_blocks_when_home_at_limit(self):
+        """Schedule game blocks with 429 when home team is at weekly limit."""
+        from .models import TeamEvent
+        for i in range(5):
+            TeamEvent.objects.create(
+                scope='TEAM', team=self.team_a, event_type='TEAM_PRACTICE',
+                title=f"Existing {i}", date_time=f"2026-06-0{i+1} 10:00:00+00",
+                created_by=self.coach,
+            )
+        token = self._get_jwt_token(self.admin)
+        headers = self._auth_header(token)
+        payload = {
+            "home_team_id": str(self.team_a.id),
+            "away_team_id": str(self.team_b.id),
+            "event_type": "TEAM_GAME",
+            "date_time": "2026-06-05T14:00:00Z",
+        }
+        response = self.client.post(
+            "/api/competition/admin/schedule-game",
+            payload,
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 429)
+
+    # ------------------------------------------------------------------
+    # Location conflicts tests
+    # ------------------------------------------------------------------
+
+    def test_location_conflicts_detected(self):
+        """Location conflict endpoint returns conflicting events."""
+        from .models import TeamEvent
+        conflicting = TeamEvent.objects.create(
+            scope='TEAM', team=self.team_a, event_type='TEAM_PRACTICE',
+            title="Conflicting", date_time="2026-06-05 14:00:00+00",
+            location="Main Field", created_by=self.coach,
+            division=self.div,
+        )
+        token = self._get_jwt_token(self.admin)
+        headers = self._auth_header(token)
+        response = self.client.get(
+            f"/api/competition/location-conflicts?location=Main+Field&date=2026-06-05&division_id={self.div.id}",
+            **headers
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], str(conflicting.id))
+
+    def test_location_conflicts_empty_when_none(self):
+        """Location conflict returns empty list when no conflicts."""
+        token = self._get_jwt_token(self.admin)
+        headers = self._auth_header(token)
+        response = self.client.get(
+            f"/api/competition/location-conflicts?location=Empty+Field&date=2026-06-05&division_id={self.div.id}",
+            **headers
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 0)
+
+    # ------------------------------------------------------------------
+    # Organization settings tests
+    # ------------------------------------------------------------------
+
+    def test_get_org_settings(self):
+        """Get returns max_events_per_team_per_week."""
+        token = self._get_jwt_token(self.admin)
+        headers = self._auth_header(token)
+        response = self.client.get(
+            f"/api/competition/organizations/{self.org.id}/settings",
+            **headers
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["max_events_per_team_per_week"], 5)
+
+    def test_update_org_settings(self):
+        """Update changes max_events_per_team_per_week."""
+        token = self._get_jwt_token(self.admin)
+        headers = self._auth_header(token)
+        payload = {"max_events_per_team_per_week": 10}
+        response = self.client.put(
+            f"/api/competition/organizations/{self.org.id}/settings",
+            payload,
+            content_type="application/json",
+            **headers
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["max_events_per_team_per_week"], 10)
