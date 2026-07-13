@@ -41,6 +41,15 @@ Hierarchy: Organization → Season → Division → Team.
 - Game↔TeamEvent bridge: `game` FK on `TeamEvent`, auto-create Game during admin scheduling ✅
 - **Scheduling API endpoints (PARTIAL):** 8 new endpoints implemented (TeamEvent CRUD, weekly status, schedule game, location conflicts, org settings). 14 of 15 tests passing. One test (`test_location_conflicts_detected`) fails — timezone/date comparison issue in the location conflicts endpoint's `ref_dt` construction.
 
+### Phase 6: Audio Notifications & Android Polish (July 13 2026)
+- Installed `edge-tts` Python package for TTS (voice: `en-GB-ThomasNeural`, pitch: `-15Hz`, rate: `-8%`)
+- Switched smart-voice-notify to `"both"` mode — sound + TTS voice immediately on task completion
+- Fixed Android `AdminScheduleScreen`:
+  - `uiState.getWeekEnd()` → `viewModel.getWeekEnd()` (unresolved reference bug)
+  - Added `@OptIn(ExperimentalMaterial3Api::class)` to `SeasonPicker`, `DivisionPicker`, `TeamDropdown`, `EventTypeSelector`
+- Added Enter/Done key action on password field in `LoginScreen` to trigger login submit
+- Committed live scoring APIs, scheduling API endpoints, schema fixes (14 files, +1231 lines, `da31c39`)
+
 ## Android Client (`/mnt/c/Users/flybo/AndroidStudioProjects/DiamondManager`)
 
 **Stack:** Kotlin, Jetpack Compose, Retrofit + OkHttp + kotlinx.serialization, DataStore.
