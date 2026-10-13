@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   srs:
-    image: ossrs/srs:5-snapshot
+    image: ossrs/srs:5
     container_name: baseball-srs-relay
     restart: always
     ports:
