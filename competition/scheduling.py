@@ -82,3 +82,6 @@ def get_location_conflicts(location, date_time, division, exclude_ids=None):
         qs = qs.exclude(id__in=exclude_ids)
 
     return list(qs.select_related('team', 'opponent_team').order_by('date_time'))
+
+def check_location_conflict(*args, **kwargs):
+    return get_location_conflicts(*args, **kwargs)

@@ -110,3 +110,22 @@ class Team(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.division.name})"
+class OrganizationYouTubeConfig(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.OneToOneField(Organization, on_delete=models.CASCADE, related_name="youtube_config")
+    youtube_channel_id = models.CharField(max_length=100, blank=True, help_text="YouTube Channel ID (e.g., UC...)")
+    youtube_client_id = models.CharField(max_length=255, blank=True)
+    youtube_client_secret = models.CharField(max_length=255, blank=True, help_text="POC: plaintext; encrypt in prod")
+    youtube_refresh_token = models.CharField(max_length=255, blank=True, help_text="POC: plaintext; encrypt in prod")
+    streaming_server_srt_url = models.CharField(max_length=255, blank=True, help_text="SRT base URL e.g. srt://relay.example.com:10080")
+    privacy_status = models.CharField(
+        max_length=20,
+        choices=[("public", "Public"), ("unlisted", "Unlisted"), ("private", "Private")],
+        default="unlisted",
+    )
+    is_enabled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"YouTube Config - {self.organization.name}"

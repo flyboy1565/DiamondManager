@@ -1,0 +1,16 @@
+# srs.conf - minimal ingest for SRT (v1 relay-only; FFmpeg worker per stream planned)
+listen          1935;
+max_connections 1000;
+daemon          off;
+srs_log_tank    console;
+
+srt_server {
+    enabled     on;
+    listen      10080;
+}
+
+vhost __defaultVhost__ {
+    # No global forward for per-game routing in v1.
+    # Per-game FFmpeg ingests srt://<relay>:10080?streamid=live/game-<id>
+    # and pushes to YouTube RTMP with game-specific stream key.
+}

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Organization, Season, Team, Division, Facility
+from .models import Organization, Season, Team, Division, Facility, OrganizationYouTubeConfig
 
 models_to_register = [Season, Team, Division]
 
@@ -37,3 +37,8 @@ class FacilityAdmin(admin.ModelAdmin):
     list_display = ['name', 'field_name', 'address', 'organization']
     list_filter = ['organization']
     search_fields = ['name', 'address', 'field_name']
+@admin.register(OrganizationYouTubeConfig)
+class OrganizationYouTubeConfigAdmin(admin.ModelAdmin):
+    list_display = ['organization', 'youtube_channel_id', 'is_enabled', 'privacy_status']
+    search_fields = ['organization__name', 'youtube_channel_id']
+    list_filter = ['is_enabled']

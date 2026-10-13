@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  srs:
+    image: ossrs/srs:5-snapshot
+    container_name: baseball-srs-relay
+    restart: always
+    ports:
+      - "1935:1935"       # RTMP ingest/out
+      - "8080:8080"       # HTTP API / Web dashboard
+      - "10080:10080/udp" # SRT ingest port
+    volumes:
+      - ./srs.conf:/usr/local/srs/conf/srs.conf

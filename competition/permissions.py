@@ -104,3 +104,62 @@ def get_allowed_event_types(user, scope, team=None, division=None, organization=
     scope_permissions = EVENT_PERMISSIONS.get(scope, {})
     return scope_permissions.get(user_role, [])
 
+
+from ninja_extra import permissions as n_permissions
+
+class IsOrgOwnerOrAdmin(n_permissions.BasePermission):
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        roles = list(request.user.groups.values_list('name', flat=True))
+        if request.user.is_superuser or 'OWNER' in roles or 'ORG_ADMIN' in roles:
+            return True
+        return False
+
+class IsGameManagerOrScorekeeper(n_permissions.BasePermission):
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        roles = list(request.user.groups.values_list('name', flat=True))
+        if request.user.is_superuser or any(r in ('OWNER','ORG_ADMIN','TEAM_MANAGER','SCOREKEEPER') for r in roles):
+            return True
+        return False
+
+class IsEventCreatorOrAdmin(n_permissions.BasePermission):
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        roles = list(request.user.groups.values_list('name', flat=True))
+        if request.user.is_superuser or any(r in ('OWNER','ORG_ADMIN') for r in roles):
+            return True
+        return False
+
+def require_team_manager_or_scorekeeper(request):
+    if not request.user or not request.user.is_authenticated:
+        from ninja.errors import HttpError
+        raise HttpError(403, "Authentication required")
+    roles = list(request.user.groups.values_list('name', flat=True))
+    if request.user.is_superuser or any(r in ('OWNER','ORG_ADMIN','TEAM_MANAGER','SCOREKEEPER') for r in roles):
+        return True
+    from ninja.errors import HttpError
+    raise HttpError(403, "Permission denied")
+
+def require_event_creator_or_admin(request, event):
+    if not request.user or not request.user.is_authenticated:
+        from ninja.errors import HttpError
+        raise HttpError(403, "Authentication required")
+    roles = list(request.user.groups.values_list('name', flat=True))
+    if request.user.is_superuser or any(r in ('OWNER','ORG_ADMIN') for r in roles):
+        return True
+    if event.created_by == request.user:
+        return True
+    from ninja.errors import HttpError
+    raise HttpError(403, "Permission denied")
+
+def can_schedule_game(request, division):
+    require_team_manager_or_scorekeeper(request)
+    return True
+
+def can_manage_event(request, event):
+    require_event_creator_or_admin(request, event)
+    return True

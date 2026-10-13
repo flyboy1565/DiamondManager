@@ -206,6 +206,23 @@ class Game(models.Model):
     is_completed = models.BooleanField(default=False)
     scoring_data = models.JSONField(default=dict, blank=True)
 
+    STREAM_STATUS_CHOICES = [
+        ('idle', 'Idle'),
+        ('preparing', 'Preparing'),
+        ('live', 'Live'),
+        ('ended', 'Ended'),
+        ('error', 'Error'),
+    ]
+    stream_status = models.CharField(max_length=12, choices=STREAM_STATUS_CHOICES, default='idle')
+    youtube_video_id = models.CharField(max_length=32, blank=True)
+    youtube_broadcast_id = models.CharField(max_length=128, blank=True)
+    youtube_stream_id = models.CharField(max_length=128, blank=True)
+    srt_stream_id = models.CharField(max_length=64, blank=True)
+    stream_started_at = models.DateTimeField(null=True, blank=True)
+    stream_ended_at = models.DateTimeField(null=True, blank=True)
+    is_streaming_enabled = models.BooleanField(default=True)
+    stream_error = models.TextField(blank=True)
+
     def __str__(self):
         return f"{self.home_team} vs {self.away_team} - {self.date_time.strftime('%m/%d')}"
 
