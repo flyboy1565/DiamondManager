@@ -31,6 +31,21 @@ All endpoints require header `X-Relay-Token: <RELAY_TOKEN>`.
 ## Larix Config
 Full SRT URL: `srt://<relay-host>:10080?streamid=live/game-<game_id>`
 
+## Stream Lifecycle
+1. `POST /api/competition/games/{id}/stream/start` — creates YouTube broadcast + stream,
+   binds them, starts the relay agent, and sets the game to `preparing`.
+2. A cron/loop runs `python manage.py reconcile_streams` — polls YouTube stream health;
+   once `active` it transitions the broadcast to `live` and flips the game to `live`.
+   Games that never produce a signal within `STREAM_RECONCILE_TIMEOUT` seconds are
+   marked `error`.
+3. `POST /api/competition/games/{id}/stream/stop` — stops the relay agent, completes the
+   broadcast, and sets the game to `ended`.
+
+Run the reconciler on a schedule, e.g. every 30s:
+```
+* * * * * for i in 0 30; do python manage.py reconcile_streams; sleep 30; done
+```
+
 ## YouTube Config Per Org
 Create `OrganizationYouTubeConfig` in Django admin or via API later. If missing/disabled, fallback channel is used if configured.
 

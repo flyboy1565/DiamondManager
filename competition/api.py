@@ -32,6 +32,8 @@ from . import schemas
 from profiles.models import Profile
 from leagues.models import Team, Division, Organization
 from .streaming.youtube import YouTubeLiveService, YouTubeConfigError
+from .streaming import relay
+from .streaming.relay import RelayError, relay_enabled
 
 router = Router(auth=JWTAuth())
 
@@ -492,78 +494,9 @@ def _can_score(request, game):
         return True
     return False
 
-@router.post("/games/{game_id}/stream/start", response=StreamStartResponseSchema)
-def start_stream(request, game_id: str):
-    game = get_object_or_404(Game, id=game_id)
-    profile = _get_user_profile(request)
-    if not profile or profile.organization_id != game.season.organization_id:
-        # allow if game manager/scorekeeper roles? basic check
-        roles = list(request.user.groups.values_list('name', flat=True)) if hasattr(request.user, 'groups') else []
-        if not any(r in ('ORG_ADMIN', 'TEAM_MANAGER', 'SCOREKEEPER', 'OWNER') for r in roles) and not request.user.is_superuser:
-            from ninja.errors import HttpError
-            raise HttpError(403, "Permission denied")
-    svc = YouTubeLiveService()
-    try:
-        title = f"{game.home_team.name} vs {game.away_team.name} - {game.date_time.strftime('%Y-%m-%d %H:%M')}"
-        bcast = svc.create_broadcast(game.season.organization, title=title, description='', privacy_status=None)
-        stream = svc.create_stream(game.season.organization)
-        svc.bind_broadcast(game.season.organization, bcast['youtube_broadcast_id'], stream['youtube_stream_id'])
-    except YouTubeConfigError as e:
-        from ninja.errors import HttpError
-        raise HttpError(400, str(e))
-    game.youtube_broadcast_id = bcast['youtube_broadcast_id']
-    game.youtube_stream_id = stream['youtube_stream_id']
-    game.youtube_video_id = bcast['youtube_video_id'] or bcast['youtube_broadcast_id']
-    game.srt_stream_id = f"live/game-{game.id}"
-    game.stream_status = 'live'
-    game.stream_started_at = timezone.now()
-    game.is_streaming_enabled = True
-    game.save(update_fields=['youtube_broadcast_id','youtube_stream_id','youtube_video_id','srt_stream_id','stream_status','stream_started_at','is_streaming_enabled'])
-    cfg = getattr(game.season.organization, 'youtube_config', None)
-    srt_base = None
-    if cfg and cfg.streaming_server_srt_url:
-        srt_base = cfg.streaming_server_srt_url
-    else:
-        from django.conf import settings
-        srt_base = getattr(settings, 'STREAMING_SERVER_SRT_URL_DEFAULT', '')
-    if srt_base.startswith('srt://'):
-        srt_url = srt_base
-        srt_base_clean = srt_base.replace('srt://','')
-    else:
-        srt_url = f"srt://{srt_base}" if srt_base else ''
-        srt_base_clean = srt_base
-    full_srt_url = f"{srt_url}?streamid={game.srt_stream_id}" if game.srt_stream_id else srt_url
-    embed_url = f"https://www.youtube.com/embed/{game.youtube_video_id}" if game.youtube_video_id else ''
-    return StreamStartResponseSchema(
-        srt_url=srt_url,
-        srt_stream_id=game.srt_stream_id or '',
-        full_srt_url=full_srt_url,
-        youtube_video_id=game.youtube_video_id or '',
-        youtube_broadcast_id=game.youtube_broadcast_id or '',
-        youtube_stream_id=game.youtube_stream_id or '',
-        embed_url=embed_url,
-        stream_status=game.stream_status,
-    )
-
-
-@router.post("/games/{game_id}/stream/stop")
-def stop_stream(request, game_id: str):
-    game = get_object_or_404(Game, id=game_id)
-    profile = _get_user_profile(request)
-    roles = list(request.user.groups.values_list('name', flat=True)) if hasattr(request.user, 'groups') else []
-    if not (request.user.is_superuser or (profile and profile.organization_id == game.season.organization_id) or any(r in ('ORG_ADMIN','TEAM_MANAGER','SCOREKEEPER','OWNER') for r in roles)):
-        from ninja.errors import HttpError
-        raise HttpError(403, "Permission denied")
-    game.stream_status = 'ended'
-    game.stream_ended_at = timezone.now()
-    game.save(update_fields=['stream_status','stream_ended_at'])
-    return {"status": "ok", "stream_status": game.stream_status}
-
-
-@router.get("/games/{game_id}/stream/status", response=StreamStartResponseSchema)
-def stream_status(request, game_id: str):
-    game = get_object_or_404(Game, id=game_id)
-    cfg = getattr(game.season.organization, 'youtube_config', None)
+def _build_stream_response(game):
+    org = game.season.organization
+    cfg = getattr(org, 'youtube_config', None)
     srt_base = cfg.streaming_server_srt_url if cfg and cfg.streaming_server_srt_url else getattr(settings, 'STREAMING_SERVER_SRT_URL_DEFAULT', '')
     if srt_base.startswith('srt://'):
         srt_url = srt_base
@@ -581,6 +514,107 @@ def stream_status(request, game_id: str):
         embed_url=embed_url,
         stream_status=game.stream_status,
     )
+
+
+def _rollback_youtube_stream(svc, org, bcast, stream):
+    if bcast and bcast.get('youtube_broadcast_id'):
+        try:
+            svc.delete_broadcast(org, bcast['youtube_broadcast_id'])
+        except YouTubeConfigError:
+            pass
+    if stream and stream.get('youtube_stream_id'):
+        try:
+            svc.delete_stream(org, stream['youtube_stream_id'])
+        except YouTubeConfigError:
+            pass
+
+
+@router.post("/games/{game_id}/stream/start", response=StreamStartResponseSchema)
+def start_stream(request, game_id: str):
+    from ninja.errors import HttpError
+    game = get_object_or_404(Game, id=game_id)
+    if not _can_score(request, game):
+        raise HttpError(403, "Permission denied")
+
+    org = game.season.organization
+    svc = YouTubeLiveService()
+    bcast = None
+    stream = None
+    try:
+        title = f"{game.home_team.name} vs {game.away_team.name} - {game.date_time.strftime('%Y-%m-%d %H:%M')}"
+        bcast = svc.create_broadcast(org, title=title, description='', privacy_status=None)
+        stream = svc.create_stream(org)
+        svc.bind_broadcast(org, bcast['youtube_broadcast_id'], stream['youtube_stream_id'])
+    except YouTubeConfigError as e:
+        _rollback_youtube_stream(svc, org, bcast, stream)
+        game.stream_status = 'error'
+        game.stream_error = str(e)
+        game.save(update_fields=['stream_status', 'stream_error'])
+        raise HttpError(400, str(e))
+
+    game.youtube_broadcast_id = bcast['youtube_broadcast_id']
+    game.youtube_stream_id = stream['youtube_stream_id']
+    game.youtube_video_id = bcast.get('youtube_video_id') or bcast['youtube_broadcast_id']
+    game.srt_stream_id = f"live/game-{game.id}"
+    game.stream_status = 'preparing'
+    game.stream_started_at = timezone.now()
+    game.stream_ended_at = None
+    game.is_streaming_enabled = True
+    game.stream_error = ''
+    game.save(update_fields=[
+        'youtube_broadcast_id', 'youtube_stream_id', 'youtube_video_id',
+        'srt_stream_id', 'stream_status', 'stream_started_at', 'stream_ended_at',
+        'is_streaming_enabled', 'stream_error',
+    ])
+
+    if relay_enabled():
+        ingest_address = stream.get('ingestion_address')
+        stream_key = stream.get('stream_key')
+        if ingest_address and stream_key:
+            try:
+                relay.start_relay(game.srt_stream_id, ingest_address, stream_key)
+            except RelayError as e:
+                game.stream_status = 'error'
+                game.stream_error = f"Relay start failed: {e}"
+                game.save(update_fields=['stream_status', 'stream_error'])
+                raise HttpError(502, game.stream_error)
+        else:
+            game.stream_error = 'YouTube did not return an ingest address/key'
+            game.save(update_fields=['stream_error'])
+
+    return _build_stream_response(game)
+
+
+@router.post("/games/{game_id}/stream/stop")
+def stop_stream(request, game_id: str):
+    from ninja.errors import HttpError
+    game = get_object_or_404(Game, id=game_id)
+    if not _can_score(request, game):
+        raise HttpError(403, "Permission denied")
+
+    if relay_enabled() and game.srt_stream_id:
+        try:
+            relay.stop_relay(game.srt_stream_id)
+        except RelayError:
+            pass
+
+    if game.youtube_broadcast_id:
+        try:
+            YouTubeLiveService().complete_broadcast(game.season.organization, game.youtube_broadcast_id)
+        except YouTubeConfigError:
+            pass
+
+    game.stream_status = 'ended'
+    game.stream_ended_at = timezone.now()
+    game.is_streaming_enabled = False
+    game.save(update_fields=['stream_status', 'stream_ended_at', 'is_streaming_enabled'])
+    return {"status": "ok", "stream_status": game.stream_status}
+
+
+@router.get("/games/{game_id}/stream/status", response=StreamStartResponseSchema)
+def stream_status(request, game_id: str):
+    game = get_object_or_404(Game, id=game_id)
+    return _build_stream_response(game)
 
 @router.get("/games/{game_id}/scoreboard", response=schemas.GameScoreDetailSchema)
 def get_scoreboard(request, game_id: UUID):

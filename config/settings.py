@@ -149,3 +149,6 @@ STREAMING_RELAY_ENABLED = os.environ.get('STREAMING_RELAY_ENABLED', 'False').low
 STREAMING_RELAY_AGENT_URL = os.environ.get('STREAMING_RELAY_AGENT_URL', 'http://127.0.0.1:8088')
 STREAMING_RELAY_AGENT_TOKEN = os.environ.get('STREAMING_RELAY_AGENT_TOKEN', '')
 STREAMING_RELAY_TIMEOUT = float(os.environ.get('STREAMING_RELAY_TIMEOUT', '10'))
+
+# Seconds to wait for a 'preparing' broadcast to reach the field before marking it errored
+STREAM_RECONCILE_TIMEOUT = int(os.environ.get('STREAM_RECONCILE_TIMEOUT', '180'))

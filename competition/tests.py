@@ -1311,3 +1311,302 @@ class RelayClientTestCase(TestCase):
             self.assertTrue(relay.relay_enabled())
         with override_settings(STREAMING_RELAY_ENABLED=False):
             self.assertFalse(relay.relay_enabled())
+
+
+class YouTubeServiceTestCase(TestCase):
+    """Unit tests for YouTubeLiveService lifecycle helpers (no network)."""
+
+    def test_get_service_cache_hit_returns_tuple(self):
+        from competition.streaming.youtube import YouTubeLiveService
+
+        svc = YouTubeLiveService()
+        svc._service = object()
+        svc._cfg = object()
+        service, cfg = svc._get_service(None)
+        self.assertIs(service, svc._service)
+        self.assertIs(cfg, svc._cfg)
+
+    def test_transition_rejects_unknown_status(self):
+        from competition.streaming.youtube import YouTubeLiveService, YouTubeConfigError
+
+        svc = YouTubeLiveService()
+        svc._service = object()
+        svc._cfg = object()
+        with self.assertRaises(YouTubeConfigError):
+            svc.transition_broadcast(None, "b1", "bogus")
+
+
+class StreamLifecycleTestCase(TestCase):
+    """TDD: Tests for orchestrated stream start/stop (mocked YouTube + relay)."""
+
+    def setUp(self):
+        Organization = apps.get_model('leagues', 'Organization')
+        Season = apps.get_model('leagues', 'Season')
+        Division = apps.get_model('leagues', 'Division')
+        Team = apps.get_model('leagues', 'Team')
+
+        self.org = Organization.objects.create(name="Stream Org")
+        self.season = Season.objects.create(organization=self.org, season="Spring", year=2026)
+        self.div = Division.objects.create(season=self.season, name="10U")
+        self.home = Team.objects.create(name="Home", division=self.div, access_code="SHOME1")
+        self.away = Team.objects.create(name="Away", division=self.div, access_code="SAWAY1")
+
+        self.scorer = User.objects.create_user(
+            username="streamscorer", password="password123",
+            email="ss@test.com", first_name="S", last_name="S",
+        )
+        self.scorer.profile.role = "SCORER"
+        self.scorer.profile.organization = self.org
+        self.scorer.profile.save()
+
+        from .models import Game
+        self.game = Game.objects.create(
+            season=self.season,
+            home_team=self.home,
+            away_team=self.away,
+            date_time="2026-06-01 10:00:00+00",
+            location="Test Field",
+        )
+
+    def _token(self):
+        resp = self.client.post("/api/token/pair", json.dumps({
+            "username": "streamscorer", "password": "password123",
+        }), content_type="application/json")
+        return {"HTTP_AUTHORIZATION": f"Bearer {resp.json()['access']}"}
+
+    def _fake_service(self, create_stream_error=None, health=None, transition_error=None):
+        from unittest.mock import MagicMock
+        svc = MagicMock()
+        svc.create_broadcast.return_value = {
+            'youtube_broadcast_id': 'bcast-1',
+            'youtube_video_id': 'bcast-1',
+        }
+        if create_stream_error:
+            svc.create_stream.side_effect = create_stream_error
+        else:
+            svc.create_stream.return_value = {
+                'youtube_stream_id': 'stream-1',
+                'stream_key': 'key-1',
+                'ingestion_address': 'rtmp://a.rtmp.youtube.com/live2',
+            }
+        svc.bind_broadcast.return_value = True
+        svc.get_stream_health.return_value = health
+        if transition_error:
+            svc.transition_broadcast.side_effect = transition_error
+        return svc
+
+    def test_start_stream_sets_preparing_and_starts_relay(self):
+        from unittest.mock import patch
+        fake = self._fake_service()
+        with patch("competition.api.YouTubeLiveService", return_value=fake), \
+             patch("competition.api.relay_enabled", return_value=True), \
+             patch("competition.api.relay") as mock_relay:
+            resp = self.client.post(
+                f"/api/competition/games/{self.game.id}/stream/start", **self._token()
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["stream_status"], "preparing")
+        self.assertEqual(data["youtube_video_id"], "bcast-1")
+        self.assertIn("streamid=live/game-", data["full_srt_url"])
+
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.stream_status, "preparing")
+        self.assertTrue(self.game.is_streaming_enabled)
+        mock_relay.start_relay.assert_called_once_with(
+            self.game.srt_stream_id,
+            "rtmp://a.rtmp.youtube.com/live2",
+            "key-1",
+        )
+
+    def test_start_stream_rolls_back_on_youtube_error(self):
+        from unittest.mock import patch
+        from competition.streaming.youtube import YouTubeConfigError
+
+        fake = self._fake_service(create_stream_error=YouTubeConfigError("boom"))
+        with patch("competition.api.YouTubeLiveService", return_value=fake), \
+             patch("competition.api.relay_enabled", return_value=False):
+            resp = self.client.post(
+                f"/api/competition/games/{self.game.id}/stream/start", **self._token()
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        fake.delete_broadcast.assert_called_once()
+        fake.delete_stream.assert_not_called()
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.stream_status, "error")
+        self.assertIn("boom", self.game.stream_error)
+
+    def test_start_stream_relay_failure_sets_error(self):
+        from unittest.mock import patch
+        from competition.streaming.relay import RelayError
+
+        fake = self._fake_service()
+        with patch("competition.api.YouTubeLiveService", return_value=fake), \
+             patch("competition.api.relay_enabled", return_value=True), \
+             patch("competition.api.relay") as mock_relay:
+            mock_relay.start_relay.side_effect = RelayError("nope")
+            resp = self.client.post(
+                f"/api/competition/games/{self.game.id}/stream/start", **self._token()
+            )
+
+        self.assertEqual(resp.status_code, 502)
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.stream_status, "error")
+        self.assertIn("Relay start failed", self.game.stream_error)
+
+    def test_stop_stream_stops_relay_and_completes_broadcast(self):
+        from unittest.mock import patch
+        self.game.youtube_broadcast_id = "bcast-1"
+        self.game.youtube_stream_id = "stream-1"
+        self.game.youtube_video_id = "bcast-1"
+        self.game.srt_stream_id = f"live/game-{self.game.id}"
+        self.game.stream_status = "live"
+        self.game.is_streaming_enabled = True
+        self.game.save()
+
+        fake = self._fake_service()
+        with patch("competition.api.YouTubeLiveService", return_value=fake), \
+             patch("competition.api.relay_enabled", return_value=True), \
+             patch("competition.api.relay") as mock_relay:
+            resp = self.client.post(
+                f"/api/competition/games/{self.game.id}/stream/stop", **self._token()
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["stream_status"], "ended")
+        mock_relay.stop_relay.assert_called_once_with(self.game.srt_stream_id)
+        fake.complete_broadcast.assert_called_once()
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.stream_status, "ended")
+        self.assertFalse(self.game.is_streaming_enabled)
+
+    def test_stream_status_returns_srt_url(self):
+        self.game.srt_stream_id = f"live/game-{self.game.id}"
+        self.game.stream_status = "preparing"
+        self.game.save()
+        resp = self.client.get(
+            f"/api/competition/games/{self.game.id}/stream/status", **self._token()
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["stream_status"], "preparing")
+        self.assertIn(f"streamid=live/game-{self.game.id}", data["full_srt_url"])
+
+    def test_start_stream_permission_denied_for_parent(self):
+        from unittest.mock import patch
+        parent = User.objects.create_user(
+            username="streamparent", password="password123", email="p@test.com"
+        )
+        parent.profile.role = "PARENT"
+        parent.profile.save()
+        resp = self.client.post("/api/token/pair", json.dumps({
+            "username": "streamparent", "password": "password123",
+        }), content_type="application/json")
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {resp.json()['access']}"}
+        with patch("competition.api.YouTubeLiveService"):
+            resp = self.client.post(
+                f"/api/competition/games/{self.game.id}/stream/start", **headers
+            )
+        self.assertEqual(resp.status_code, 403)
+
+
+class ReconcileStreamsCommandTestCase(TestCase):
+    """TDD: Tests for the reconcile_streams management command."""
+
+    def setUp(self):
+        Organization = apps.get_model('leagues', 'Organization')
+        Season = apps.get_model('leagues', 'Season')
+        Division = apps.get_model('leagues', 'Division')
+        Team = apps.get_model('leagues', 'Team')
+
+        self.org = Organization.objects.create(name="Reconcile Org")
+        self.season = Season.objects.create(organization=self.org, season="Spring", year=2026)
+        self.div = Division.objects.create(season=self.season, name="10U")
+        self.home = Team.objects.create(name="Home", division=self.div, access_code="RHOME1")
+        self.away = Team.objects.create(name="Away", division=self.div, access_code="RAWAY1")
+
+        from .models import Game
+        from django.utils import timezone
+        self.game = Game.objects.create(
+            season=self.season,
+            home_team=self.home,
+            away_team=self.away,
+            date_time="2026-06-01 10:00:00+00",
+            location="Test Field",
+            youtube_broadcast_id="bcast-1",
+            youtube_stream_id="stream-1",
+            srt_stream_id="live/game-x",
+            stream_status="preparing",
+            stream_started_at=timezone.now(),
+        )
+
+    def _run(self, **kwargs):
+        from io import StringIO
+        from django.core.management import call_command
+        out = StringIO()
+        call_command("reconcile_streams", stdout=out, **kwargs)
+        return out.getvalue()
+
+    def test_promotes_active_stream_to_live(self):
+        from unittest.mock import patch, MagicMock
+        fake = MagicMock()
+        fake.get_stream_health.return_value = "active"
+        fake.transition_broadcast.return_value = True
+        with patch(
+            "competition.management.commands.reconcile_streams.YouTubeLiveService",
+            return_value=fake,
+        ):
+            self._run()
+
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.stream_status, "live")
+
+    def test_marks_errored_on_timeout(self):
+        from unittest.mock import patch, MagicMock
+        from django.utils import timezone
+        from datetime import timedelta
+
+        self.game.stream_started_at = timezone.now() - timedelta(seconds=600)
+        self.game.save(update_fields=["stream_started_at"])
+
+        fake = MagicMock()
+        fake.get_stream_health.return_value = "inactive"
+        with patch(
+            "competition.management.commands.reconcile_streams.YouTubeLiveService",
+            return_value=fake,
+        ):
+            self._run(timeout=180)
+
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.stream_status, "error")
+        self.assertIn("Timed out", self.game.stream_error)
+
+    def test_leaves_recent_stream_waiting(self):
+        from unittest.mock import patch, MagicMock
+        fake = MagicMock()
+        fake.get_stream_health.return_value = "inactive"
+        with patch(
+            "competition.management.commands.reconcile_streams.YouTubeLiveService",
+            return_value=fake,
+        ):
+            out = self._run()
+
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.stream_status, "preparing")
+        self.assertIn("waiting=1", out)
+
+    def test_dry_run_does_not_write(self):
+        from unittest.mock import patch, MagicMock
+        fake = MagicMock()
+        fake.get_stream_health.return_value = "active"
+        with patch(
+            "competition.management.commands.reconcile_streams.YouTubeLiveService",
+            return_value=fake,
+        ):
+            out = self._run(dry_run=True)
+
+        self.game.refresh_from_db()
+        self.assertEqual(self.game.stream_status, "preparing")
+        self.assertIn("dry_run=True", out)

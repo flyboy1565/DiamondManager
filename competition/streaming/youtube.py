@@ -10,6 +10,7 @@ class YouTubeConfigError(Exception):
 class YouTubeLiveService:
     def __init__(self):
         self._service = None
+        self._cfg = None
 
     def _get_config(self, org):
         # Prefer org config if enabled and has minimal creds
@@ -50,8 +51,8 @@ class YouTubeLiveService:
         return build('youtube', 'v3', credentials=creds, cache_discovery=False)
 
     def _get_service(self, org):
-        if self._service:
-            return self._service
+        if self._service and self._cfg is not None:
+            return self._service, self._cfg
         cfg = self._get_config(org)
         if not cfg:
             # try to construct fallback cfg object-like via settings
@@ -143,4 +144,74 @@ class YouTubeLiveService:
             ).execute()
         except Exception as e:
             raise YouTubeConfigError(f'Failed to bind broadcast: {e}')
+        return True
+
+    def get_broadcast(self, org, broadcast_id: str) -> Dict[str, Any]:
+        service, _ = self._get_service(org)
+        try:
+            resp = service.liveBroadcasts().list(
+                part='id,snippet,status,contentDetails',
+                id=broadcast_id,
+            ).execute()
+        except Exception as e:
+            raise YouTubeConfigError(f'Failed to fetch broadcast: {e}')
+        items = resp.get('items') or []
+        if not items:
+            raise YouTubeConfigError(f'Broadcast {broadcast_id} not found')
+        item = items[0]
+        # For live broadcasts the broadcast id doubles as the video id.
+        return {
+            'youtube_broadcast_id': item.get('id') or broadcast_id,
+            'youtube_video_id': item.get('id') or broadcast_id,
+            'lifeCycle_status': (item.get('status') or {}).get('lifeCycleStatus'),
+            'privacy_status': (item.get('status') or {}).get('privacyStatus'),
+        }
+
+    def transition_broadcast(self, org, broadcast_id: str, status: str):
+        """Transition a broadcast to one of: testing, live, complete."""
+        if status not in ('testing', 'live', 'complete'):
+            raise YouTubeConfigError(f'Unsupported broadcast status: {status}')
+        service, _ = self._get_service(org)
+        try:
+            service.liveBroadcasts().transition(
+                part='id,status',
+                broadcastStatus=status,
+                id=broadcast_id,
+            ).execute()
+        except Exception as e:
+            raise YouTubeConfigError(f'Failed to transition broadcast to {status}: {e}')
+        return True
+
+    def complete_broadcast(self, org, broadcast_id: str):
+        return self.transition_broadcast(org, broadcast_id, 'complete')
+
+    def get_stream_health(self, org, stream_id: str) -> Optional[str]:
+        """Return the YouTube stream status, e.g. 'active', 'ready', 'inactive'."""
+        service, _ = self._get_service(org)
+        try:
+            resp = service.liveStreams().list(
+                part='id,status',
+                id=stream_id,
+            ).execute()
+        except Exception as e:
+            raise YouTubeConfigError(f'Failed to fetch stream health: {e}')
+        items = resp.get('items') or []
+        if not items:
+            return None
+        return ((items[0].get('status') or {}).get('streamStatus'))
+
+    def delete_broadcast(self, org, broadcast_id: str):
+        service, _ = self._get_service(org)
+        try:
+            service.liveBroadcasts().delete(id=broadcast_id).execute()
+        except Exception as e:
+            raise YouTubeConfigError(f'Failed to delete broadcast: {e}')
+        return True
+
+    def delete_stream(self, org, stream_id: str):
+        service, _ = self._get_service(org)
+        try:
+            service.liveStreams().delete(id=stream_id).execute()
+        except Exception as e:
+            raise YouTubeConfigError(f'Failed to delete stream: {e}')
         return True
