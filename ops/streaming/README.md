@@ -65,3 +65,4 @@ Create `OrganizationYouTubeConfig` in Django admin or via API later. If missing/
 ## Notes
 - POC stores secrets as plaintext in DB (marked). Encrypt in production.
 - Manual Go Live only for v1.
+- Admin: Django admin exposes stream status on Games and per-org YouTube config. The reconciler (`reconcile_streams`) automates `preparing → live` on signal.

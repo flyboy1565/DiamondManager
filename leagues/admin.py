@@ -39,6 +39,7 @@ class FacilityAdmin(admin.ModelAdmin):
     search_fields = ['name', 'address', 'field_name']
 @admin.register(OrganizationYouTubeConfig)
 class OrganizationYouTubeConfigAdmin(admin.ModelAdmin):
-    list_display = ['organization', 'youtube_channel_id', 'is_enabled', 'privacy_status']
+    list_display = ['organization', 'youtube_channel_id', 'is_enabled', 'privacy_status', 'streaming_server_srt_url']
     search_fields = ['organization__name', 'youtube_channel_id']
-    list_filter = ['is_enabled']
+    list_filter = ['is_enabled', 'privacy_status']
+    readonly_fields = ['id', 'created_at', 'updated_at']
