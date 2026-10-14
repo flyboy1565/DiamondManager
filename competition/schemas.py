@@ -13,6 +13,7 @@ class StreamStartResponseSchema(Schema):
     youtube_stream_id: str = ""
     embed_url: str = ""
     stream_status: str = ""
+    stream_error: str = ""
 
 # Original schemas from HEAD (full set)
 class TeamEventSchema(Schema):

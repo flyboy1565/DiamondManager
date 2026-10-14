@@ -523,6 +523,7 @@ def _build_stream_response(game):
         youtube_stream_id=game.youtube_stream_id or '',
         embed_url=embed_url,
         stream_status=game.stream_status,
+        stream_error=game.stream_error or '',
     )
 
 
