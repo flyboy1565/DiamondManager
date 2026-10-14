@@ -9,3 +9,22 @@ services:
       - "10080:10080/udp" # SRT ingest port
     volumes:
       - ./srs.conf:/usr/local/srs/conf/srs.conf
+
+  relay-agent:
+    build: ./relay-agent
+    container_name: baseball-relay-agent
+    restart: always
+    depends_on:
+      - srs
+    environment:
+      RELAY_TOKEN: ${RELAY_TOKEN:-change-me}
+      SRS_RTMP_BASE: ${SRS_RTMP_BASE:-rtmp://srs:1935}
+      RELAY_LOG_DIR: /var/log/relay
+      FFMPEG_BIN: ffmpeg
+    ports:
+      - "8088:8088"       # Relay control API
+    volumes:
+      - relay-logs:/var/log/relay
+
+volumes:
+  relay-logs:

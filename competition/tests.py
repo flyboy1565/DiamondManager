@@ -1207,3 +1207,107 @@ class SchedulingAPITestCase(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["max_events_per_team_per_week"], 10)
+
+
+class RelayClientTestCase(TestCase):
+    """Unit tests for the relay control agent client (mocked HTTP)."""
+
+    def _fake_urlopen(self, payload, status=200):
+        import json as _json
+        from unittest.mock import MagicMock
+
+        class FakeResponse:
+            def __init__(self, data):
+                self._data = data
+
+            def read(self):
+                return self._data
+
+        class FakeCtx:
+            def __enter__(self):
+                return FakeResponse(_json.dumps(payload).encode("utf-8"))
+
+            def __exit__(self, *args):
+                return False
+
+        def _opener(*args, **kwargs):
+            return FakeCtx()
+
+        mock = MagicMock()
+        mock.side_effect = _opener
+        return mock
+
+    def test_start_relay_posts_payload(self):
+        from unittest.mock import patch
+        from competition.streaming import relay
+
+        opener = self._fake_urlopen({"status": "started", "running": True})
+        with patch("urllib.request.urlopen", opener) as mock:
+            result = relay.start_relay("live/game-1", "rtmp://a.rtmp.youtube.com/live2", "secret-key")
+
+        self.assertEqual(result["status"], "started")
+        request = mock.call_args[0][0]
+        self.assertEqual(request.get_method(), "POST")
+        self.assertTrue(request.full_url.endswith("/relay/start"))
+        body = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(body["stream_id"], "live/game-1")
+        self.assertEqual(body["stream_key"], "secret-key")
+
+    def test_stop_relay_posts_stream_id(self):
+        from unittest.mock import patch
+        from competition.streaming import relay
+
+        opener = self._fake_urlopen({"status": "stopped"})
+        with patch("urllib.request.urlopen", opener) as mock:
+            result = relay.stop_relay("live/game-1")
+
+        self.assertEqual(result["status"], "stopped")
+        request = mock.call_args[0][0]
+        self.assertTrue(request.full_url.endswith("/relay/stop"))
+        self.assertEqual(json.loads(request.data.decode("utf-8")), {"stream_id": "live/game-1"})
+
+    def test_relay_status_gets_stream_path(self):
+        from unittest.mock import patch
+        from competition.streaming import relay
+
+        opener = self._fake_urlopen({"stream_id": "live/game-1", "running": True, "exists": True})
+        with patch("urllib.request.urlopen", opener) as mock:
+            result = relay.relay_status("live/game-1")
+
+        self.assertTrue(result["running"])
+        request = mock.call_args[0][0]
+        self.assertEqual(request.get_method(), "GET")
+        self.assertTrue(request.full_url.endswith("/relay/live/game-1"))
+
+    def test_request_raises_relay_error_on_http_error(self):
+        import urllib.error
+        from unittest.mock import patch
+        from competition.streaming import relay
+
+        def _raise(*args, **kwargs):
+            raise urllib.error.HTTPError("url", 401, "Unauthorized", {}, None)
+
+        with patch("urllib.request.urlopen", _raise):
+            with self.assertRaises(relay.RelayError):
+                relay.relay_status("live/game-1")
+
+    def test_request_raises_relay_error_on_unreachable(self):
+        import urllib.error
+        from unittest.mock import patch
+        from competition.streaming import relay
+
+        def _raise(*args, **kwargs):
+            raise urllib.error.URLError("connection refused")
+
+        with patch("urllib.request.urlopen", _raise):
+            with self.assertRaises(relay.RelayError):
+                relay.start_relay("live/game-1", "rtmp://x", "k")
+
+    def test_relay_enabled_reads_setting(self):
+        from django.test import override_settings
+        from competition.streaming import relay
+
+        with override_settings(STREAMING_RELAY_ENABLED=True):
+            self.assertTrue(relay.relay_enabled())
+        with override_settings(STREAMING_RELAY_ENABLED=False):
+            self.assertFalse(relay.relay_enabled())
