@@ -328,3 +328,14 @@ class OrganizationYouTubeConfigSchema(Schema):
     streaming_server_srt_url: Optional[str] = ""
     privacy_status: Optional[str] = "unlisted"
     is_enabled: bool = False
+
+
+class YouTubeOAuthStartSchema(Schema):
+    authorize_url: str
+    redirect_uri: str
+
+
+class YouTubeOAuthCallbackSchema(Schema):
+    connected: bool
+    organization_id: str
+    youtube_channel_id: str = ""

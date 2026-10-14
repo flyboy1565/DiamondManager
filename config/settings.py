@@ -152,3 +152,10 @@ STREAMING_RELAY_TIMEOUT = float(os.environ.get('STREAMING_RELAY_TIMEOUT', '10'))
 
 # Seconds to wait for a 'preparing' broadcast to reach the field before marking it errored
 STREAM_RECONCILE_TIMEOUT = int(os.environ.get('STREAM_RECONCILE_TIMEOUT', '180'))
+
+# YouTube OAuth (per-org channel onboarding)
+YOUTUBE_OAUTH_CLIENT_ID = os.environ.get('YOUTUBE_OAUTH_CLIENT_ID', '')
+YOUTUBE_OAUTH_CLIENT_SECRET = os.environ.get('YOUTUBE_OAUTH_CLIENT_SECRET', '')
+YOUTUBE_OAUTH_REDIRECT_URI = os.environ.get('YOUTUBE_OAUTH_REDIRECT_URI', '')
+YOUTUBE_OAUTH_SUCCESS_REDIRECT = os.environ.get('YOUTUBE_OAUTH_SUCCESS_REDIRECT', '')
+YOUTUBE_OAUTH_ERROR_REDIRECT = os.environ.get('YOUTUBE_OAUTH_ERROR_REDIRECT', '')

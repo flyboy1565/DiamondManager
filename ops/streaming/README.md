@@ -49,6 +49,19 @@ Run the reconciler on a schedule, e.g. every 30s:
 ## YouTube Config Per Org
 Create `OrganizationYouTubeConfig` in Django admin or via API later. If missing/disabled, fallback channel is used if configured.
 
+### Connecting a channel via OAuth
+1. Configure the platform OAuth app (`YOUTUBE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI`).
+   Register the redirect URI in Google Cloud Console.
+2. An org admin calls `GET /api/competition/organizations/{org_id}/youtube/oauth/start`
+   and opens the returned `authorize_url` in a browser.
+3. Google redirects to `GET /api/competition/youtube/oauth/callback` (public, no JWT).
+   The backend exchanges the code, reads the user's channel id, and stores the
+   refresh token + channel id on the org's config, enabling it.
+4. If `YOUTUBE_OAUTH_SUCCESS_REDIRECT` is set, the browser is sent there with
+   `?organization_id=...&youtube_channel_id=...`; otherwise JSON is returned.
+
+`state` is a signed, single-use, 10-minute token (replay-protected via cache).
+
 ## Notes
 - POC stores secrets as plaintext in DB (marked). Encrypt in production.
 - Manual Go Live only for v1.

@@ -34,6 +34,7 @@ from leagues.models import Team, Division, Organization
 from .streaming.youtube import YouTubeLiveService, YouTubeConfigError
 from .streaming import relay
 from .streaming.relay import RelayError, relay_enabled
+from .streaming import oauth
 
 router = Router(auth=JWTAuth())
 
@@ -493,6 +494,15 @@ def _can_score(request, game):
     if any(r in ('OWNER','ORG_ADMIN','TEAM_MANAGER','SCOREKEEPER') for r in roles):
         return True
     return False
+
+def _can_manage_org(request, org_id):
+    if request.user.is_superuser:
+        return True
+    profile = _get_user_profile(request)
+    roles = list(request.user.groups.values_list('name', flat=True)) if hasattr(request.user, 'groups') else []
+    if profile and str(profile.organization_id) == str(org_id) and getattr(profile, 'role', '') in ('ORG_ADMIN', 'OWNER'):
+        return True
+    return any(r in ('ORG_ADMIN', 'OWNER') for r in roles)
 
 def _build_stream_response(game):
     org = game.season.organization
@@ -1228,10 +1238,7 @@ def get_youtube_config(request, org_id: UUID):
 def update_youtube_config(request, org_id: UUID, data: schemas.OrganizationYouTubeConfigSchema):
     from leagues.models import Organization, OrganizationYouTubeConfig
     org = get_object_or_404(Organization, id=org_id)
-    # basic perm: org admin/owner
-    profile = _get_user_profile(request)
-    roles = list(request.user.groups.values_list('name', flat=True)) if hasattr(request.user, 'groups') else []
-    if not (request.user.is_superuser or (profile and profile.organization_id == org_id) or any(r in ('ORG_ADMIN','OWNER') for r in roles)):
+    if not _can_manage_org(request, org.id):
         from ninja.errors import HttpError
         raise HttpError(403, "Permission denied")
     cfg, _ = OrganizationYouTubeConfig.objects.get_or_create(organization=org)
@@ -1251,4 +1258,68 @@ def update_youtube_config(request, org_id: UUID, data: schemas.OrganizationYouTu
         streaming_server_srt_url=cfg.streaming_server_srt_url,
         privacy_status=cfg.privacy_status,
         is_enabled=cfg.is_enabled,
+    )
+
+
+def _oauth_error_response(message, error_redirect):
+    if error_redirect:
+        from django.http import HttpResponseRedirect
+        from urllib.parse import quote
+        sep = '&' if '?' in error_redirect else '?'
+        return HttpResponseRedirect(f"{error_redirect}{sep}error={quote(message)}")
+    return 400, {'detail': message}
+
+
+@router.get("/organizations/{org_id}/youtube/oauth/start", response={200: schemas.YouTubeOAuthStartSchema, 400: dict, 403: dict})
+def youtube_oauth_start(request, org_id: UUID):
+    from ninja.errors import HttpError
+    from leagues.models import Organization
+    org = get_object_or_404(Organization, id=org_id)
+    if not _can_manage_org(request, org.id):
+        raise HttpError(403, "Permission denied")
+    try:
+        url = oauth.build_authorization_url(org.id, request.user.id)
+        redirect_uri = oauth.get_redirect_uri()
+    except oauth.OAuthError as e:
+        raise HttpError(400, str(e))
+    return 200, schemas.YouTubeOAuthStartSchema(authorize_url=url, redirect_uri=redirect_uri)
+
+
+@router.get("/youtube/oauth/callback", auth=None, response={200: schemas.YouTubeOAuthCallbackSchema, 400: dict, 404: dict})
+def youtube_oauth_callback(request, code: str = None, state: str = None, error: str = None):
+    from leagues.models import Organization, OrganizationYouTubeConfig
+    success_redirect = getattr(settings, 'YOUTUBE_OAUTH_SUCCESS_REDIRECT', '')
+    error_redirect = getattr(settings, 'YOUTUBE_OAUTH_ERROR_REDIRECT', '')
+    if error:
+        return _oauth_error_response(f"Authorization denied: {error}", error_redirect)
+    try:
+        payload = oauth.consume_state(state)
+        tokens = oauth.exchange_code(code)
+        org = Organization.objects.filter(id=payload['org_id']).first()
+        if not org:
+            raise oauth.OAuthError('Organization not found')
+    except oauth.OAuthError as e:
+        return _oauth_error_response(str(e), error_redirect)
+
+    cfg, _ = OrganizationYouTubeConfig.objects.get_or_create(organization=org)
+    cfg.youtube_client_id = tokens['client_id']
+    cfg.youtube_client_secret = tokens['client_secret']
+    cfg.youtube_refresh_token = tokens['refresh_token']
+    cfg.youtube_channel_id = tokens['channel_id']
+    cfg.is_enabled = True
+    cfg.save(update_fields=[
+        'youtube_client_id', 'youtube_client_secret', 'youtube_refresh_token',
+        'youtube_channel_id', 'is_enabled', 'updated_at',
+    ])
+
+    if success_redirect:
+        from django.http import HttpResponseRedirect
+        sep = '&' if '?' in success_redirect else '?'
+        return HttpResponseRedirect(
+            f"{success_redirect}{sep}organization_id={org.id}&youtube_channel_id={cfg.youtube_channel_id}"
+        )
+    return 200, schemas.YouTubeOAuthCallbackSchema(
+        connected=True,
+        organization_id=str(org.id),
+        youtube_channel_id=cfg.youtube_channel_id,
     )

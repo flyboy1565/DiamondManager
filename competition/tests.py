@@ -1610,3 +1610,220 @@ class ReconcileStreamsCommandTestCase(TestCase):
         self.game.refresh_from_db()
         self.assertEqual(self.game.stream_status, "preparing")
         self.assertIn("dry_run=True", out)
+
+
+OAUTH_SETTINGS = dict(
+    YOUTUBE_OAUTH_CLIENT_ID="cid.apps.googleusercontent.com",
+    YOUTUBE_OAUTH_CLIENT_SECRET="csecret",
+    YOUTUBE_OAUTH_REDIRECT_URI="https://example.com/api/competition/youtube/oauth/callback",
+)
+
+
+class YouTubeOAuthClientTestCase(TestCase):
+    """Unit tests for competition/streaming/oauth.py (network mocked)."""
+
+    def test_build_authorization_url_contains_params(self):
+        from django.test import override_settings
+        from competition.streaming import oauth
+
+        with override_settings(**OAUTH_SETTINGS):
+            url = oauth.build_authorization_url("org-1", 7)
+        self.assertIn("accounts.google.com/o/oauth2/v2/auth", url)
+        self.assertIn("client_id=cid.apps.googleusercontent.com", url)
+        self.assertIn("access_type=offline", url)
+        self.assertIn("state=", url)
+
+    def test_config_missing_raises(self):
+        from django.test import override_settings
+        from competition.streaming import oauth
+
+        with override_settings(YOUTUBE_OAUTH_CLIENT_ID="", YOUTUBE_OAUTH_CLIENT_SECRET="", YOUTUBE_OAUTH_REDIRECT_URI=""):
+            with self.assertRaises(oauth.OAuthError):
+                oauth.build_authorization_url("org-1", 7)
+
+    def test_state_round_trip(self):
+        from competition.streaming import oauth
+
+        token = oauth.create_state("org-1", 7)
+        payload = oauth.consume_state(token)
+        self.assertEqual(payload["org_id"], "org-1")
+        self.assertEqual(payload["user_id"], 7)
+
+    def test_state_is_single_use(self):
+        from competition.streaming import oauth
+
+        token = oauth.create_state("org-1", 7)
+        oauth.consume_state(token)
+        with self.assertRaises(oauth.OAuthError):
+            oauth.consume_state(token)
+
+    def test_bad_state_signature_rejected(self):
+        from competition.streaming import oauth
+
+        with self.assertRaises(oauth.OAuthError):
+            oauth.consume_state("not-a-valid-token")
+
+    def test_exchange_code_returns_tokens_and_channel(self):
+        from django.test import override_settings
+        from unittest.mock import patch
+        from competition.streaming import oauth
+
+        with override_settings(**OAUTH_SETTINGS), \
+             patch("competition.streaming.oauth._http_post_form", return_value={
+                 "access_token": "at", "refresh_token": "rt",
+             }) as post, \
+             patch("competition.streaming.oauth._http_get_json", return_value={
+                 "items": [{"id": "UC123"}],
+             }):
+            tokens = oauth.exchange_code("auth-code")
+
+        self.assertEqual(tokens["refresh_token"], "rt")
+        self.assertEqual(tokens["channel_id"], "UC123")
+        self.assertEqual(tokens["client_id"], "cid.apps.googleusercontent.com")
+        self.assertEqual(post.call_args[0][1]["grant_type"], "authorization_code")
+
+    def test_exchange_code_without_refresh_token_raises(self):
+        from django.test import override_settings
+        from unittest.mock import patch
+        from competition.streaming import oauth
+
+        with override_settings(**OAUTH_SETTINGS), \
+             patch("competition.streaming.oauth._http_post_form", return_value={"access_token": "at"}):
+            with self.assertRaises(oauth.OAuthError):
+                oauth.exchange_code("auth-code")
+
+    def test_fetch_channel_id_no_items_raises(self):
+        from unittest.mock import patch
+        from competition.streaming import oauth
+
+        with patch("competition.streaming.oauth._http_get_json", return_value={"items": []}):
+            with self.assertRaises(oauth.OAuthError):
+                oauth.fetch_channel_id("at")
+
+
+class YouTubeOAuthAPITestCase(TestCase):
+    """TDD: Tests for the YouTube OAuth onboarding endpoints."""
+
+    def setUp(self):
+        Organization = apps.get_model('leagues', 'Organization')
+
+        self.org = Organization.objects.create(name="OAuth Org")
+
+        self.admin = User.objects.create_user(
+            username="orgadmin", password="password123", email="a@test.com",
+        )
+        self.admin.profile.role = "ORG_ADMIN"
+        self.admin.profile.organization = self.org
+        self.admin.profile.save()
+
+        self.parent = User.objects.create_user(
+            username="oauthparent", password="password123", email="p@test.com",
+        )
+        self.parent.profile.role = "PARENT"
+        self.parent.profile.save()
+
+    def _token(self, username):
+        resp = self.client.post("/api/token/pair", json.dumps({
+            "username": username, "password": "password123",
+        }), content_type="application/json")
+        return {"HTTP_AUTHORIZATION": f"Bearer {resp.json()['access']}"}
+
+    def test_start_returns_authorize_url_for_admin(self):
+        from django.test import override_settings
+
+        with override_settings(**OAUTH_SETTINGS):
+            resp = self.client.get(
+                f"/api/competition/organizations/{self.org.id}/youtube/oauth/start",
+                **self._token("orgadmin"),
+            )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("accounts.google.com", data["authorize_url"])
+        self.assertEqual(data["redirect_uri"], OAUTH_SETTINGS["YOUTUBE_OAUTH_REDIRECT_URI"])
+
+    def test_start_forbidden_for_parent(self):
+        from django.test import override_settings
+
+        with override_settings(**OAUTH_SETTINGS):
+            resp = self.client.get(
+                f"/api/competition/organizations/{self.org.id}/youtube/oauth/start",
+                **self._token("oauthparent"),
+            )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_start_returns_400_when_unconfigured(self):
+        from django.test import override_settings
+
+        with override_settings(YOUTUBE_OAUTH_CLIENT_ID="", YOUTUBE_OAUTH_CLIENT_SECRET="", YOUTUBE_OAUTH_REDIRECT_URI=""):
+            resp = self.client.get(
+                f"/api/competition/organizations/{self.org.id}/youtube/oauth/start",
+                **self._token("orgadmin"),
+            )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_callback_stores_channel_config(self):
+        from django.test import override_settings
+        from unittest.mock import patch
+        from competition.streaming import oauth
+        from leagues.models import OrganizationYouTubeConfig
+
+        state = oauth.create_state(self.org.id, self.admin.id)
+        tokens = {
+            "client_id": "cid", "client_secret": "sec",
+            "refresh_token": "rt", "channel_id": "UC999",
+        }
+        with override_settings(**OAUTH_SETTINGS), \
+             patch("competition.api.oauth.exchange_code", return_value=tokens):
+            resp = self.client.get(
+                "/api/competition/youtube/oauth/callback",
+                {"code": "abc", "state": state},
+            )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["connected"])
+        self.assertEqual(data["youtube_channel_id"], "UC999")
+
+        cfg = OrganizationYouTubeConfig.objects.get(organization=self.org)
+        self.assertEqual(cfg.youtube_refresh_token, "rt")
+        self.assertEqual(cfg.youtube_channel_id, "UC999")
+        self.assertTrue(cfg.is_enabled)
+
+    def test_callback_rejects_replayed_state(self):
+        from django.test import override_settings
+        from unittest.mock import patch
+        from competition.streaming import oauth
+
+        state = oauth.create_state(self.org.id, self.admin.id)
+        with override_settings(**OAUTH_SETTINGS), \
+             patch("competition.api.oauth.exchange_code", return_value={
+                 "client_id": "cid", "client_secret": "sec",
+                 "refresh_token": "rt", "channel_id": "UC999",
+             }):
+            first = self.client.get("/api/competition/youtube/oauth/callback", {"code": "abc", "state": state})
+            second = self.client.get("/api/competition/youtube/oauth/callback", {"code": "abc", "state": state})
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 400)
+
+    def test_callback_handles_denied_error(self):
+        resp = self.client.get(
+            "/api/competition/youtube/oauth/callback",
+            {"error": "access_denied"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("access_denied", resp.json()["detail"])
+
+    def test_callback_redirects_when_success_redirect_configured(self):
+        from django.test import override_settings
+        from unittest.mock import patch
+        from competition.streaming import oauth
+
+        state = oauth.create_state(self.org.id, self.admin.id)
+        with override_settings(YOUTUBE_OAUTH_SUCCESS_REDIRECT="https://app.example.com/stream/connected"), \
+             patch("competition.api.oauth.exchange_code", return_value={
+                 "client_id": "cid", "client_secret": "sec",
+                 "refresh_token": "rt", "channel_id": "UC999",
+             }):
+            resp = self.client.get("/api/competition/youtube/oauth/callback", {"code": "abc", "state": state})
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("app.example.com/stream/connected", resp["Location"])
+        self.assertIn("youtube_channel_id=UC999", resp["Location"])
