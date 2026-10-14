@@ -1,5 +1,6 @@
 from typing import List, Optional
 from datetime import datetime, timedelta
+import secrets
 import uuid
 
 from ninja import Router, Schema
@@ -43,33 +44,325 @@ def _get_user_profile(request):
 
 
 
+_BALL_TYPES = {'ball', 'ball_outside', 'ball_inside', 'ball_high', 'ball_low', 'ball_dirt'}
+_STRIKE_TYPES = {'strike', 'strike_called', 'strike_swinging', 'strike_foul_tip'}
+_OUT_TYPES = {'out', 'out_ground', 'out_fly', 'out_line', 'out_pop', 'strikeout'}
+_RUNNER_EVENTS = {'steal', 'caught_stealing', 'balk', 'pickoff'}
+_BASE_INDEX = {'first': 1, 'second': 2, 'third': 3}
+_INDEX_BASE = {1: 'first', 2: 'second', 3: 'third'}
+
+
+def _batting_side(game):
+    # Top of the inning: away team bats. Bottom: home team bats.
+    return 'away' if game.is_top_inning else 'home'
+
+
+def _score_field(side):
+    return 'away_score' if side == 'away' else 'home_score'
+
+
+def _runners(game):
+    sd = game.scoring_data
+    runners = sd.get('runners')
+    if not isinstance(runners, dict):
+        runners = {'first': None, 'second': None, 'third': None}
+        sd['runners'] = runners
+    for base in ('first', 'second', 'third'):
+        runners.setdefault(base, None)
+    return runners
+
+
+def _batter_dict(game):
+    cb = game.scoring_data.get('current_batter') or {}
+    pid = cb.get('player_id')
+    if pid is None:
+        return {'player_id': None, 'player_name': ''}
+    return {'player_id': pid, 'player_name': cb.get('player_name') or _get_player_name(pid)}
+
+
+def _add_run(game, side, count=1):
+    field = _score_field(side)
+    setattr(game, field, (getattr(game, field) or 0) + count)
+    innings = game.scoring_data.setdefault('innings', {})
+    key = str(game.current_inning or 1)
+    slot = innings.setdefault(key, {'home': 0, 'away': 0})
+    slot[side] = slot.get(side, 0) + count
+
+
+def _advance_all(game, bases):
+    """Advance every runner on base by ``bases``; runners reaching home score."""
+    runners = _runners(game)
+    side = _batting_side(game)
+    new = {'first': None, 'second': None, 'third': None}
+    for base in ('third', 'second', 'first'):
+        runner = runners.get(base)
+        if not runner:
+            continue
+        dest = _BASE_INDEX[base] + bases
+        if dest >= 4:
+            _add_run(game, side)
+        else:
+            new[_INDEX_BASE[dest]] = runner
+    runners.update(new)
+
+
+def _place_batter(game, base):
+    _runners(game)[base] = _batter_dict(game)
+
+
+def _award_first(game):
+    """Walk/HBP: put batter on first, forcing runners ahead."""
+    runners = _runners(game)
+    batter = _batter_dict(game)
+    if not runners['first']:
+        runners['first'] = batter
+    elif not runners['second']:
+        runners['second'] = runners['first']
+        runners['first'] = batter
+    elif not runners['third']:
+        runners['third'] = runners['second']
+        runners['second'] = runners['first']
+        runners['first'] = batter
+    else:
+        _add_run(game, _batting_side(game))
+        runners['third'] = runners['second']
+        runners['second'] = runners['first']
+        runners['first'] = batter
+
+
+def _lead_runner_base(game):
+    runners = _runners(game)
+    for base in ('third', 'second', 'first'):
+        if runners.get(base):
+            return base
+    return None
+
+
+def _remove_runner(game, base):
+    runners = _runners(game)
+    value = runners.get(base)
+    runners[base] = None
+    return value
+
+
+def _remove_lead_runner(game):
+    base = _lead_runner_base(game)
+    if base:
+        _remove_runner(game, base)
+    return base
+
+
+def _clear_runners(game):
+    runners = _runners(game)
+    runners['first'] = runners['second'] = runners['third'] = None
+
+
+def _steal(game, base):
+    if base not in _BASE_INDEX:
+        return
+    runners = _runners(game)
+    runner = runners.get(base)
+    if not runner:
+        return
+    runners[base] = None
+    if base == 'first':
+        runners['second'] = runner
+    elif base == 'second':
+        runners['third'] = runner
+    else:
+        _add_run(game, _batting_side(game))
+
+
+def _record_out(game, count=1):
+    game.outs = (game.outs or 0) + count
+
+
+def _reset_count(game):
+    game.balls = 0
+    game.strikes = 0
+
+
+def _check_inning_change(game):
+    if (game.outs or 0) >= 3:
+        game.outs = 0
+        game.balls = 0
+        game.strikes = 0
+        _clear_runners(game)
+        if game.is_top_inning:
+            game.is_top_inning = False
+        else:
+            game.is_top_inning = True
+            game.current_inning = (game.current_inning or 1) + 1
+
+
+def _record_pitch_stat(game, side):
+    if side not in ('home', 'away'):
+        return
+    pitchers = game.scoring_data.setdefault('pitchers', {})
+    pitcher = (game.scoring_data.get('current_pitcher') or {}).get(side)
+    if not pitcher:
+        return
+    pid = pitcher.get('player_id')
+    if pid is None:
+        return
+    key = str(pid)
+    slot = pitchers.setdefault(key, {'pitch_count': 0, 'name': pitcher.get('player_name', '')})
+    slot['pitch_count'] = slot.get('pitch_count', 0) + 1
+
+
+def _record_batter_atbat(game, side, hit=False, home_run=False, hit_by_pitch=False):
+    cb = game.scoring_data.get('current_batter') or {}
+    pid = cb.get('player_id')
+    if pid is not None:
+        batters = game.scoring_data.setdefault('batters', {})
+        slot = batters.setdefault(str(pid), {
+            'at_bats': 0, 'hits': 0, 'home_runs': 0, 'name': cb.get('player_name', '')
+        })
+        if not hit_by_pitch:
+            slot['at_bats'] = slot.get('at_bats', 0) + 1
+        if hit:
+            slot['hits'] = slot.get('hits', 0) + 1
+        if home_run:
+            slot['home_runs'] = slot.get('home_runs', 0) + 1
+    _advance_batter(game, side)
+
+
 def _apply_record_pitch(game, pitch_type, extra=None):
-    # minimal POC logic
-    game.pitch_count = (game.pitch_count or 0) + 1
-    game.balls = (game.balls or 0)
-    game.strikes = (game.strikes or 0)
-    if pitch_type == 'ball':
+    extra = extra or {}
+    if not isinstance(game.scoring_data, dict):
+        game.scoring_data = {}
+    game.balls = game.balls or 0
+    game.strikes = game.strikes or 0
+    game.outs = game.outs or 0
+    game.pitch_count = game.pitch_count or 0
+    side = _batting_side(game)
+    pitch = pitch_type
+
+    if pitch not in _RUNNER_EVENTS:
+        game.pitch_count += 1
+        _record_pitch_stat(game, side)
+
+    if pitch in _BALL_TYPES:
         game.balls += 1
-    elif pitch_type == 'strike':
+        if game.balls >= 4:
+            _award_first(game)
+            _reset_count(game)
+    elif pitch in _STRIKE_TYPES:
         game.strikes += 1
-    elif pitch_type == 'foul':
+        if game.strikes >= 3:
+            _record_out(game, 1)
+            _reset_count(game)
+            _record_batter_atbat(game, side)
+    elif pitch == 'foul':
         if game.strikes < 2:
             game.strikes += 1
-    elif pitch_type == 'hit' or pitch_type == 'single':
-        game.balls = 0
-        game.strikes = 0
-        game.outs = game.outs or 0
-    elif pitch_type == 'out':
-        game.outs = (game.outs or 0) + 1
-        game.balls = 0
-        game.strikes = 0
-    else:
-        pass
-    if (game.outs or 0) >= 3:
-        game.outs = 3
+    elif pitch == 'bunt_foul':
+        if game.strikes >= 2:
+            _record_out(game, 1)
+            _reset_count(game)
+            _record_batter_atbat(game, side)
+        else:
+            game.strikes += 1
+    elif pitch == 'hit_by_pitch':
+        _award_first(game)
+        _reset_count(game)
+        _record_batter_atbat(game, side, hit_by_pitch=True)
+    elif pitch in ('single', 'hit'):
+        _advance_all(game, 1)
+        _place_batter(game, 'first')
+        _reset_count(game)
+        _record_batter_atbat(game, side, hit=True)
+    elif pitch == 'double':
+        _advance_all(game, 2)
+        _place_batter(game, 'second')
+        _reset_count(game)
+        _record_batter_atbat(game, side, hit=True)
+    elif pitch == 'triple':
+        _advance_all(game, 3)
+        _place_batter(game, 'third')
+        _reset_count(game)
+        _record_batter_atbat(game, side, hit=True)
+    elif pitch == 'homerun':
+        _advance_all(game, 4)
+        _add_run(game, side)
+        _reset_count(game)
+        _record_batter_atbat(game, side, hit=True, home_run=True)
+    elif pitch in _OUT_TYPES:
+        _record_out(game, 1)
+        _reset_count(game)
+        _record_batter_atbat(game, side)
+    elif pitch == 'double_play':
+        removed = _remove_lead_runner(game)
+        _record_out(game, 2 if removed else 1)
+        _reset_count(game)
+        _record_batter_atbat(game, side)
+    elif pitch == 'triple_play':
+        _clear_runners(game)
+        _record_out(game, 3)
+        _reset_count(game)
+        _record_batter_atbat(game, side)
+    elif pitch == 'pickoff':
+        base = extra.get('runner_base') or _lead_runner_base(game)
+        if base:
+            _remove_runner(game, base)
+            _record_out(game, 1)
+    elif pitch == 'steal':
+        _steal(game, extra.get('runner_base') or _lead_runner_base(game))
+    elif pitch == 'caught_stealing':
+        base = extra.get('runner_base') or _lead_runner_base(game)
+        if base:
+            _remove_runner(game, base)
+            _record_out(game, 1)
+    elif pitch == 'sac_bunt':
+        _advance_all(game, 1)
+        _record_out(game, 1)
+        _reset_count(game)
+        _record_batter_atbat(game, side)
+    elif pitch == 'sac_fly':
+        runners = _runners(game)
+        if runners.get('third'):
+            _add_run(game, side)
+            runners['third'] = None
+        _record_out(game, 1)
+        _reset_count(game)
+        _record_batter_atbat(game, side)
+    elif pitch == 'error':
+        _advance_all(game, 1)
+        _place_batter(game, 'first')
+        _reset_count(game)
+        _record_batter_atbat(game, side)
+    elif pitch == 'fielders_choice':
+        runners = _runners(game)
+        if runners.get('first'):
+            runners['first'] = None
+        _place_batter(game, 'first')
+        _record_out(game, 1)
+        _reset_count(game)
+        _record_batter_atbat(game, side)
+    elif pitch in ('wild_pitch', 'passed_ball', 'balk'):
+        _advance_all(game, 1)
+    elif pitch == 'dropped_third_strike':
+        runners = _runners(game)
+        if runners.get('first') and (game.outs or 0) < 2:
+            _record_out(game, 1)
+            _record_batter_atbat(game, side)
+        else:
+            _award_first(game)
+            _record_batter_atbat(game, side, hit_by_pitch=True)
+        _reset_count(game)
+    elif pitch == 'infield_fly':
+        _record_out(game, 1)
+        _reset_count(game)
+        _record_batter_atbat(game, side)
+
+    _check_inning_change(game)
     game.save()
 
-def _init_scoring_data(game):
+
+def _init_scoring_data(game, force=False):
+    sd = game.scoring_data if isinstance(game.scoring_data, dict) else {}
+    if sd.get('initialized') and not force:
+        return
     game.current_inning = 1
     game.is_top_inning = True
     game.outs = 0
@@ -81,13 +374,111 @@ def _init_scoring_data(game):
     game.is_live = True
     game.is_completed = False
     game.scoring_data = {
+        'initialized': True,
         'innings': {},
-        'players': {},
+        'batters': {},
+        'pitchers': {},
         'current_batter': None,
         'current_pitcher': None,
-        'on_base': [],
+        'runners': {'first': None, 'second': None, 'third': None},
+        'lineup_order': sd.get('lineup_order', {'home': [], 'away': []}),
+        'batting_order_idx': sd.get('batting_order_idx', {'home': 0, 'away': 0}),
     }
     game.save()
+
+
+def _get_player_name(player_id):
+    if player_id is None:
+        return ''
+    try:
+        from profiles.models import Player
+        player = Player.objects.filter(id=player_id).first()
+        return str(player) if player else ''
+    except Exception:
+        return ''
+
+
+def _advance_batter(game, side):
+    sd = game.scoring_data if isinstance(game.scoring_data, dict) else {}
+    lineup = (sd.get('lineup_order') or {}).get(side) or []
+    if not lineup:
+        return
+    idx = (sd.get('batting_order_idx') or {}).get(side, 0)
+    idx = (idx + 1) % len(lineup)
+    sd.setdefault('batting_order_idx', {})[side] = idx
+    pid = lineup[idx]
+    sd['current_batter'] = {
+        'side': side,
+        'player_id': pid,
+        'player_name': _get_player_name(pid),
+    }
+
+
+def _get_current_batter_player_id(game, side):
+    sd = game.scoring_data if isinstance(game.scoring_data, dict) else {}
+    lineup = (sd.get('lineup_order') or {}).get(side) or []
+    if not lineup:
+        return None
+    idx = (sd.get('batting_order_idx') or {}).get(side, 0)
+    try:
+        return lineup[idx % len(lineup)]
+    except Exception:
+        return None
+
+
+def compute_game_stats(game):
+    sd = game.scoring_data if isinstance(game.scoring_data, dict) else {}
+
+    def _coerce(mapping):
+        out = {}
+        for key, value in (mapping or {}).items():
+            try:
+                key = int(key)
+            except (TypeError, ValueError):
+                pass
+            out[key] = dict(value) if isinstance(value, dict) else value
+        return out
+
+    innings = {}
+    for key, value in (sd.get('innings') or {}).items():
+        try:
+            key = int(key)
+        except (TypeError, ValueError):
+            pass
+        value = value or {}
+        innings[key] = {'home': value.get('home', 0), 'away': value.get('away', 0)}
+
+    return {
+        'batters': _coerce(sd.get('batters')),
+        'pitchers': _coerce(sd.get('pitchers')),
+        'innings': innings,
+    }
+
+
+def _game_to_dict(game):
+    return {
+        'id': game.id,
+        'season_id': game.season_id,
+        'home_team_id': game.home_team_id,
+        'away_team_id': game.away_team_id,
+        'home_team_name': game.home_team.name,
+        'away_team_name': game.away_team.name,
+        'date_time': game.date_time,
+        'location': game.location,
+        'home_score': game.home_score or 0,
+        'away_score': game.away_score or 0,
+        'is_live': game.is_live,
+        'current_inning': game.current_inning or 1,
+        'is_top_inning': game.is_top_inning,
+        'outs': game.outs or 0,
+        'balls': game.balls or 0,
+        'strikes': game.strikes or 0,
+        'pitch_count': game.pitch_count or 0,
+        'is_completed': game.is_completed,
+        'scoring_data': game.scoring_data,
+        'stream_status': game.stream_status,
+        'youtube_video_id': game.youtube_video_id,
+    }
 
 def _can_score(request, game):
     profile = _get_user_profile(request)
@@ -673,7 +1064,7 @@ def record_pitch(request, game_id: UUID, data: schemas.RecordPitchSchema):
     if not game.is_live:
         game.is_live = True
 
-    _apply_record_pitch(game, data.type)
+    _apply_record_pitch(game, data.type, extra=getattr(data, 'extra', None))
     game.save()
     return _game_to_dict(game)
 
@@ -748,7 +1139,7 @@ def score_via_token(request, game_id: UUID, token: str, data: schemas.RecordPitc
     if not game.is_live:
         game.is_live = True
 
-    _apply_record_pitch(game, data.type)
+    _apply_record_pitch(game, data.type, extra=getattr(data, 'extra', None))
     game.save()
     return _game_to_dict(game)
 
