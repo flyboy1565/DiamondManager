@@ -1,3 +1,4 @@
+import os
 """
 Django settings for config project.
 
@@ -135,3 +136,10 @@ STATIC_URL = 'static/'
 
 LOGOUT_REDIRECT_URL = 'landing_portal'
 LOGIN_URL = 'landing_portal'
+# YouTube Streaming (POC)
+STREAMING_SERVER_SRT_URL_DEFAULT = os.environ.get('STREAMING_SERVER_SRT_URL_DEFAULT', '')
+YOUTUBE_FALLBACK_CHANNEL_ID = os.environ.get('YOUTUBE_FALLBACK_CHANNEL_ID', '')
+YOUTUBE_FALLBACK_CLIENT_ID = os.environ.get('YOUTUBE_FALLBACK_CLIENT_ID', '')
+YOUTUBE_FALLBACK_CLIENT_SECRET = os.environ.get('YOUTUBE_FALLBACK_CLIENT_SECRET', '')
+YOUTUBE_FALLBACK_REFRESH_TOKEN = os.environ.get('YOUTUBE_FALLBACK_REFRESH_TOKEN', '')
+YOUTUBE_FALLBACK_PRIVACY = os.environ.get('YOUTUBE_FALLBACK_PRIVACY', 'unlisted')

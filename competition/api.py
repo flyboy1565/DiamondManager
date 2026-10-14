@@ -782,3 +782,48 @@ def get_rulebook(request):
             "category": "Base Running",
         },
     ]
+@router.get("/organizations/{org_id}/youtube-config", response={200: schemas.OrganizationYouTubeConfigSchema, 404: dict})
+def get_youtube_config(request, org_id: UUID):
+    from leagues.models import Organization
+    org = get_object_or_404(Organization, id=org_id)
+    cfg = getattr(org, 'youtube_config', None)
+    if not cfg:
+        return 404, {"detail": "No config"}
+    return schemas.OrganizationYouTubeConfigSchema(
+        youtube_channel_id=cfg.youtube_channel_id,
+        youtube_client_id=cfg.youtube_client_id,
+        youtube_client_secret=cfg.youtube_client_secret,
+        youtube_refresh_token=cfg.youtube_refresh_token,
+        streaming_server_srt_url=cfg.streaming_server_srt_url,
+        privacy_status=cfg.privacy_status,
+        is_enabled=cfg.is_enabled,
+    )
+
+@router.put("/organizations/{org_id}/youtube-config", response=schemas.OrganizationYouTubeConfigSchema)
+def update_youtube_config(request, org_id: UUID, data: schemas.OrganizationYouTubeConfigSchema):
+    from leagues.models import Organization, OrganizationYouTubeConfig
+    org = get_object_or_404(Organization, id=org_id)
+    # basic perm: org admin/owner
+    profile = _get_user_profile(request)
+    roles = list(request.user.groups.values_list('name', flat=True)) if hasattr(request.user, 'groups') else []
+    if not (request.user.is_superuser or (profile and profile.organization_id == org_id) or any(r in ('ORG_ADMIN','OWNER') for r in roles)):
+        from ninja.errors import HttpError
+        raise HttpError(403, "Permission denied")
+    cfg, _ = OrganizationYouTubeConfig.objects.get_or_create(organization=org)
+    cfg.youtube_channel_id = data.youtube_channel_id or ""
+    cfg.youtube_client_id = data.youtube_client_id or ""
+    cfg.youtube_client_secret = data.youtube_client_secret or ""
+    cfg.youtube_refresh_token = data.youtube_refresh_token or ""
+    cfg.streaming_server_srt_url = data.streaming_server_srt_url or ""
+    cfg.privacy_status = data.privacy_status or "unlisted"
+    cfg.is_enabled = data.is_enabled
+    cfg.save()
+    return schemas.OrganizationYouTubeConfigSchema(
+        youtube_channel_id=cfg.youtube_channel_id,
+        youtube_client_id=cfg.youtube_client_id,
+        youtube_client_secret=cfg.youtube_client_secret,
+        youtube_refresh_token=cfg.youtube_refresh_token,
+        streaming_server_srt_url=cfg.streaming_server_srt_url,
+        privacy_status=cfg.privacy_status,
+        is_enabled=cfg.is_enabled,
+    )

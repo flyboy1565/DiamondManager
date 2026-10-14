@@ -319,3 +319,12 @@ class RuleSchema(Schema):
     title: str
     description: str
     category: str
+
+class OrganizationYouTubeConfigSchema(Schema):
+    youtube_channel_id: Optional[str] = ""
+    youtube_client_id: Optional[str] = ""
+    youtube_client_secret: Optional[str] = ""
+    youtube_refresh_token: Optional[str] = ""
+    streaming_server_srt_url: Optional[str] = ""
+    privacy_status: Optional[str] = "unlisted"
+    is_enabled: bool = False
