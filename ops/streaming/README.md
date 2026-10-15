@@ -63,6 +63,47 @@ Create `OrganizationYouTubeConfig` in Django admin or via API later. If missing/
 `state` is a signed, single-use, 10-minute token (replay-protected via cache).
 
 ## Notes
-- POC stores secrets as plaintext in DB (marked). Encrypt in production.
+- Per-org YouTube secrets (`youtube_client_secret`, `youtube_refresh_token`) are
+  encrypted at rest with Fernet (`leagues.fields.EncryptedTextField`). Key material
+  comes from `STREAMING_ENCRYPTION_KEY` (falls back to Django `SECRET_KEY`); keep it
+  stable, since changing it makes existing ciphertext unreadable. The `youtube-config`
+  API masks secrets as `********` on read and ignores a masked/blank value on write.
+- `stream/start` is idempotent: calling it while a game is already `preparing` or
+  `live` returns the existing session instead of creating another broadcast.
 - Manual Go Live only for v1.
 - Admin: Django admin exposes stream status on Games and per-org YouTube config. The reconciler (`reconcile_streams`) automates `preparing → live` on signal.
+
+## Reconciler scheduling
+Run `python manage.py reconcile_streams` on a short interval so `preparing` games
+flip to `live` shortly after the field signal appears (and time out to `error`
+after `STREAM_RECONCILE_TIMEOUT`). Examples:
+
+cron (every 30s):
+```
+* * * * * for i in 0 30; do python manage.py reconcile_streams; sleep 30; done
+```
+
+systemd timer (every 30s), `reconcile-streams.service`:
+```
+[Unit]
+Description=Reconcile DiamondManager YouTube streams
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/diamondmanager
+ExecStart=/srv/diamondmanager/.venv/bin/python manage.py reconcile_streams
+```
+`reconcile-streams.timer`:
+```
+[Unit]
+Description=Run stream reconciler every 30s
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=30
+AccuracySec=1
+
+[Install]
+WantedBy=timers.target
+```
+

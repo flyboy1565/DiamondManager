@@ -166,3 +166,15 @@ class AlertCreateSchema(Schema):
     team_id: Optional[UUID] = None
     title: str
     message: str
+
+# ==============================================================================
+# FACILITY SCHEMAS
+# ==============================================================================
+
+class FacilitySchema(Schema):
+    id: UUID
+    name: str
+    address: str = ""
+    field_name: str = ""
+    notes: str = ""
+    display_label: str = ""

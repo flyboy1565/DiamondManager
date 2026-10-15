@@ -356,3 +356,21 @@ def delete_alert(request, alert_id: UUID):
 @router.get("/teams/{team_id}/players", response=List[profile_schemas.PlayerSchema])
 def list_players(request, team_id: UUID):
     return Player.objects.filter(team_history__team_id=team_id).prefetch_related('team_history')
+
+
+# --- FACILITY ENDPOINTS ---
+@router.get("/organizations/{org_id}/facilities", response=List[schemas.FacilitySchema])
+def list_facilities(request, org_id: UUID):
+    from .models import Facility
+    facilities = Facility.objects.filter(organization_id=org_id).order_by('name', 'field_name')
+    return [
+        {
+            "id": f.id,
+            "name": f.name,
+            "address": f.address,
+            "field_name": f.field_name,
+            "notes": f.notes,
+            "display_label": str(f),
+        }
+        for f in facilities
+    ]

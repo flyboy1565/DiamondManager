@@ -7,6 +7,7 @@ from ninja import Router, Schema
 from pydantic import UUID4 as UUID
 from ninja_jwt.authentication import JWTAuth
 from django.shortcuts import get_object_or_404
+from django.db.models import Q
 from django.utils import timezone
 from django.conf import settings
 
@@ -547,6 +548,11 @@ def start_stream(request, game_id: str):
     if not _can_score(request, game):
         raise HttpError(403, "Permission denied")
 
+    # Idempotent: a stream that is already preparing or live is returned as-is
+    # rather than creating a second broadcast/relay for the same game.
+    if game.stream_status in ('preparing', 'live'):
+        return _build_stream_response(game)
+
     org = game.season.organization
     svc = YouTubeLiveService()
     bcast = None
@@ -650,6 +656,147 @@ def get_scoreboard(request, game_id: UUID):
         stream_status=getattr(game, 'stream_status', None),
         youtube_video_id=getattr(game, 'youtube_video_id', None),
     )
+
+
+def _game_dict(game):
+    return {
+        'id': game.id,
+        'season_id': game.season_id,
+        'home_team_id': game.home_team_id,
+        'away_team_id': game.away_team_id,
+        'home_team_name': game.home_team.name,
+        'away_team_name': game.away_team.name,
+        'date_time': game.date_time,
+        'location': game.location,
+        'home_score': game.home_score,
+        'away_score': game.away_score,
+        'is_live': game.is_live,
+        'current_inning': game.current_inning,
+        'is_top_inning': game.is_top_inning,
+        'outs': game.outs,
+        'balls': game.balls,
+        'strikes': game.strikes,
+        'pitch_count': game.pitch_count,
+        'is_completed': game.is_completed,
+        'scoring_data': game.scoring_data,
+        'stream_status': game.stream_status,
+        'youtube_video_id': game.youtube_video_id,
+    }
+
+
+def _lineup_entry_dict(entry):
+    return {
+        'id': entry.id,
+        'team_id': entry.team_id,
+        'team_name': entry.team.name,
+        'player_id': entry.player_id,
+        'player_name': f"{entry.player.first_name} {entry.player.last_name}",
+        'batting_order': entry.batting_order,
+        'position': entry.position,
+        'is_active': entry.is_active,
+        'division_id': entry.team.division_id,
+    }
+
+
+# ------------------------------------------------------------------
+# Schedule API endpoints
+# ------------------------------------------------------------------
+
+@router.get("/season/{season_id}/schedule", response=List[schemas.GameSchema])
+def list_season_schedule(request, season_id: UUID):
+    games = Game.objects.filter(season_id=season_id).select_related('home_team', 'away_team')
+    return [_game_dict(g) for g in games]
+
+
+@router.get("/team/{team_id}/schedule", response=List[schemas.GameSchema])
+def get_team_schedule(request, team_id: UUID):
+    games = Game.objects.filter(
+        Q(home_team_id=team_id) | Q(away_team_id=team_id)
+    ).select_related('home_team', 'away_team')
+    return [_game_dict(g) for g in games]
+
+
+@router.get("/games/{game_id}", response=schemas.GameSchema)
+def get_game(request, game_id: UUID):
+    game = get_object_or_404(Game, id=game_id)
+    return _game_dict(game)
+
+
+# ------------------------------------------------------------------
+# Lineup API endpoints
+# ------------------------------------------------------------------
+
+@router.get("/games/{game_id}/lineup", response=List[schemas.LineupEntrySchema])
+def get_game_lineup(request, game_id: UUID):
+    game = get_object_or_404(Game, id=game_id)
+    entries = game.lineup_entries.select_related('team', 'player').all()
+    return [_lineup_entry_dict(e) for e in entries]
+
+
+@router.post("/games/{game_id}/lineup/entries", response={201: schemas.LineupEntrySchema, 403: dict})
+def create_lineup_entry(request, game_id: UUID, data: schemas.LineupEntryCreateSchema):
+    from profiles.models import Player
+    game = get_object_or_404(Game, id=game_id)
+    if not _can_score(request, game):
+        return 403, {"message": "Unauthorized."}
+    player = get_object_or_404(Player, id=data.player_id)
+    entry = GameLineupEntry.objects.create(
+        game=game,
+        team_id=data.team_id,
+        player=player,
+        batting_order=data.batting_order,
+        position=data.position or "",
+    )
+    return 201, _lineup_entry_dict(entry)
+
+
+@router.put("/games/{game_id}/lineup/entries/{entry_id}", response=schemas.LineupEntrySchema)
+def update_lineup_entry(request, game_id: UUID, entry_id: int, data: schemas.LineupEntryUpdateSchema):
+    game = get_object_or_404(Game, id=game_id)
+    entry = get_object_or_404(GameLineupEntry, id=entry_id, game=game)
+    for attr, value in data.dict(exclude_unset=True).items():
+        setattr(entry, attr, value)
+    entry.save()
+    return _lineup_entry_dict(entry)
+
+
+@router.delete("/games/{game_id}/lineup/entries/{entry_id}", response={200: dict, 404: dict})
+def delete_lineup_entry(request, game_id: UUID, entry_id: int):
+    game = get_object_or_404(Game, id=game_id)
+    entry = get_object_or_404(GameLineupEntry, id=entry_id, game=game)
+    entry.delete()
+    return 200, {"success": True}
+
+
+@router.post("/games/{game_id}/lineup/clone", response={201: List[schemas.LineupEntrySchema], 403: dict, 404: dict})
+def clone_lineup(request, game_id: UUID, data: schemas.CloneLineupSchema):
+    game = get_object_or_404(Game, id=game_id)
+    if not _can_score(request, game):
+        return 403, {"message": "Unauthorized."}
+
+    source_game = get_object_or_404(Game, id=data.source_game_id)
+    source_entries = GameLineupEntry.objects.filter(game=source_game).select_related('team', 'player')
+    if not source_entries.exists():
+        return 404, {"message": "Source game has no lineup entries."}
+
+    cloned = []
+    for se in source_entries:
+        new_entry, _ = GameLineupEntry.objects.update_or_create(
+            game=game,
+            team=se.team,
+            player=se.player,
+            defaults={
+                "batting_order": se.batting_order,
+                "position": se.position,
+                "is_active": se.is_active,
+            }
+        )
+        cloned.append(new_entry)
+
+    cloned = GameLineupEntry.objects.filter(id__in=[e.id for e in cloned]).select_related('team', 'player')
+    return 201, [_lineup_entry_dict(e) for e in cloned]
+
+
 # ------------------------------------------------------------------
 # Scheduling API endpoints
 # ------------------------------------------------------------------
@@ -1218,22 +1365,34 @@ def get_rulebook(request):
             "category": "Base Running",
         },
     ]
-@router.get("/organizations/{org_id}/youtube-config", response={200: schemas.OrganizationYouTubeConfigSchema, 404: dict})
-def get_youtube_config(request, org_id: UUID):
-    from leagues.models import Organization
-    org = get_object_or_404(Organization, id=org_id)
-    cfg = getattr(org, 'youtube_config', None)
-    if not cfg:
-        return 404, {"detail": "No config"}
+_SECRET_MASK = '********'
+
+
+def _youtube_config_schema(cfg):
+    def _mask(value):
+        return _SECRET_MASK if value else ''
+
     return schemas.OrganizationYouTubeConfigSchema(
         youtube_channel_id=cfg.youtube_channel_id,
         youtube_client_id=cfg.youtube_client_id,
-        youtube_client_secret=cfg.youtube_client_secret,
-        youtube_refresh_token=cfg.youtube_refresh_token,
+        youtube_client_secret=_mask(cfg.youtube_client_secret),
+        youtube_refresh_token=_mask(cfg.youtube_refresh_token),
         streaming_server_srt_url=cfg.streaming_server_srt_url,
         privacy_status=cfg.privacy_status,
         is_enabled=cfg.is_enabled,
     )
+
+
+@router.get("/organizations/{org_id}/youtube-config", response={200: schemas.OrganizationYouTubeConfigSchema, 403: dict, 404: dict})
+def get_youtube_config(request, org_id: UUID):
+    from leagues.models import Organization
+    org = get_object_or_404(Organization, id=org_id)
+    if not _can_manage_org(request, org.id):
+        return 403, {"detail": "Permission denied"}
+    cfg = getattr(org, 'youtube_config', None)
+    if not cfg:
+        return 404, {"detail": "No config"}
+    return _youtube_config_schema(cfg)
 
 @router.put("/organizations/{org_id}/youtube-config", response=schemas.OrganizationYouTubeConfigSchema)
 def update_youtube_config(request, org_id: UUID, data: schemas.OrganizationYouTubeConfigSchema):
@@ -1245,21 +1404,15 @@ def update_youtube_config(request, org_id: UUID, data: schemas.OrganizationYouTu
     cfg, _ = OrganizationYouTubeConfig.objects.get_or_create(organization=org)
     cfg.youtube_channel_id = data.youtube_channel_id or ""
     cfg.youtube_client_id = data.youtube_client_id or ""
-    cfg.youtube_client_secret = data.youtube_client_secret or ""
-    cfg.youtube_refresh_token = data.youtube_refresh_token or ""
+    if data.youtube_client_secret and data.youtube_client_secret != _SECRET_MASK:
+        cfg.youtube_client_secret = data.youtube_client_secret
+    if data.youtube_refresh_token and data.youtube_refresh_token != _SECRET_MASK:
+        cfg.youtube_refresh_token = data.youtube_refresh_token
     cfg.streaming_server_srt_url = data.streaming_server_srt_url or ""
     cfg.privacy_status = data.privacy_status or "unlisted"
     cfg.is_enabled = data.is_enabled
     cfg.save()
-    return schemas.OrganizationYouTubeConfigSchema(
-        youtube_channel_id=cfg.youtube_channel_id,
-        youtube_client_id=cfg.youtube_client_id,
-        youtube_client_secret=cfg.youtube_client_secret,
-        youtube_refresh_token=cfg.youtube_refresh_token,
-        streaming_server_srt_url=cfg.streaming_server_srt_url,
-        privacy_status=cfg.privacy_status,
-        is_enabled=cfg.is_enabled,
-    )
+    return _youtube_config_schema(cfg)
 
 
 def _oauth_error_response(message, error_redirect):

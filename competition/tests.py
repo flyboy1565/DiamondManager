@@ -1420,6 +1420,49 @@ class StreamLifecycleTestCase(TestCase):
             "key-1",
         )
 
+    def test_start_stream_is_idempotent_when_already_preparing(self):
+        from unittest.mock import patch
+
+        self.game.stream_status = 'preparing'
+        self.game.youtube_broadcast_id = 'existing-bCAST'
+        self.game.youtube_video_id = 'existing-video'
+        self.game.srt_stream_id = f"live/game-{self.game.id}"
+        self.game.save(update_fields=[
+            'stream_status', 'youtube_broadcast_id', 'youtube_video_id', 'srt_stream_id',
+        ])
+
+        fake = self._fake_service()
+        with patch("competition.api.YouTubeLiveService", return_value=fake), \
+             patch("competition.api.relay_enabled", return_value=True), \
+             patch("competition.api.relay") as mock_relay:
+            resp = self.client.post(
+                f"/api/competition/games/{self.game.id}/stream/start", **self._token()
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["stream_status"], "preparing")
+        self.assertEqual(resp.json()["youtube_video_id"], "existing-video")
+        # No new broadcast/stream/relay work should happen
+        fake.create_broadcast.assert_not_called()
+        fake.create_stream.assert_not_called()
+        mock_relay.start_relay.assert_not_called()
+
+    def test_start_stream_is_idempotent_when_already_live(self):
+        from unittest.mock import patch
+
+        self.game.stream_status = 'live'
+        self.game.save(update_fields=['stream_status'])
+
+        fake = self._fake_service()
+        with patch("competition.api.YouTubeLiveService", return_value=fake):
+            resp = self.client.post(
+                f"/api/competition/games/{self.game.id}/stream/start", **self._token()
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["stream_status"], "live")
+        fake.create_broadcast.assert_not_called()
+
     def test_start_stream_rolls_back_on_youtube_error(self):
         from unittest.mock import patch
         from competition.streaming.youtube import YouTubeConfigError
@@ -1827,3 +1870,338 @@ class YouTubeOAuthAPITestCase(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertIn("app.example.com/stream/connected", resp["Location"])
         self.assertIn("youtube_channel_id=UC999", resp["Location"])
+
+
+class StreamingSecretEncryptionTestCase(TestCase):
+    """TDD: YouTube secrets are encrypted at rest via EncryptedTextField."""
+
+    def setUp(self):
+        Organization = apps.get_model('leagues', 'Organization')
+        self.org = Organization.objects.create(name="Enc Org")
+
+    def test_secrets_are_encrypted_in_database(self):
+        from django.db import connection
+        from leagues.models import OrganizationYouTubeConfig
+
+        cfg = OrganizationYouTubeConfig.objects.create(
+            organization=self.org,
+            youtube_channel_id="UC123",
+            youtube_client_secret="super-secret",
+            youtube_refresh_token="refresh-token-value",
+        )
+
+        # Model attribute access returns plaintext (transparent decryption)
+        cfg.refresh_from_db()
+        self.assertEqual(cfg.youtube_client_secret, "super-secret")
+        self.assertEqual(cfg.youtube_refresh_token, "refresh-token-value")
+
+        # Raw DB value is ciphertext, not the plaintext
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT youtube_client_secret, youtube_refresh_token "
+                "FROM leagues_organizationyoutubeconfig WHERE id = %s",
+                [cfg.id.hex],
+            )
+            raw_secret, raw_token = cursor.fetchone()
+
+        self.assertNotEqual(raw_secret, "super-secret")
+        self.assertNotEqual(raw_token, "refresh-token-value")
+        self.assertNotIn("super-secret", raw_secret)
+        self.assertNotIn("refresh-token-value", raw_token)
+
+    def test_empty_secret_stays_empty(self):
+        from django.db import connection
+        from leagues.models import OrganizationYouTubeConfig
+
+        cfg = OrganizationYouTubeConfig.objects.create(organization=self.org)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT youtube_client_secret FROM leagues_organizationyoutubeconfig WHERE id = %s",
+                [cfg.id.hex],
+            )
+            self.assertEqual(cursor.fetchone()[0], "")
+
+
+class YouTubeConfigAPITestCase(TestCase):
+    """TDD: GET/PUT youtube-config masks secrets and requires admin rights."""
+
+    def setUp(self):
+        Organization = apps.get_model('leagues', 'Organization')
+        self.org = Organization.objects.create(name="Cfg Org")
+
+        self.admin = User.objects.create_user(username="cfgadmin", password="password123")
+        self.admin.profile.role = "ORG_ADMIN"
+        self.admin.profile.organization = self.org
+        self.admin.profile.save()
+
+        self.parent = User.objects.create_user(username="cfgparent", password="password123")
+        self.parent.profile.role = "PARENT"
+        self.parent.profile.save()
+
+    def _token(self, username):
+        resp = self.client.post("/api/token/pair", json.dumps({
+            "username": username, "password": "password123",
+        }), content_type="application/json")
+        return {"HTTP_AUTHORIZATION": f"Bearer {resp.json()['access']}"}
+
+    def test_get_returns_masked_secrets(self):
+        from leagues.models import OrganizationYouTubeConfig
+
+        OrganizationYouTubeConfig.objects.create(
+            organization=self.org,
+            youtube_channel_id="UC777",
+            youtube_client_secret="secret-value",
+            youtube_refresh_token="token-value",
+            is_enabled=True,
+        )
+        resp = self.client.get(
+            f"/api/competition/organizations/{self.org.id}/youtube-config",
+            **self._token("cfgadmin"),
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["youtube_channel_id"], "UC777")
+        self.assertEqual(data["youtube_client_secret"], "********")
+        self.assertEqual(data["youtube_refresh_token"], "********")
+        self.assertTrue(data["is_enabled"])
+
+    def test_get_forbidden_for_non_admin(self):
+        resp = self.client.get(
+            f"/api/competition/organizations/{self.org.id}/youtube-config",
+            **self._token("cfgparent"),
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_put_stores_and_returns_masked(self):
+        from django.db import connection
+        from leagues.models import OrganizationYouTubeConfig
+
+        resp = self.client.put(
+            f"/api/competition/organizations/{self.org.id}/youtube-config",
+            data=json.dumps({
+                "youtube_channel_id": "UC888",
+                "youtube_client_secret": "put-secret",
+                "youtube_refresh_token": "put-token",
+                "privacy_status": "public",
+                "is_enabled": True,
+            }),
+            content_type="application/json",
+            **self._token("cfgadmin"),
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["youtube_client_secret"], "********")
+        self.assertEqual(data["youtube_refresh_token"], "********")
+
+        cfg = OrganizationYouTubeConfig.objects.get(organization=self.org)
+        self.assertEqual(cfg.youtube_client_secret, "put-secret")
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT youtube_client_secret FROM leagues_organizationyoutubeconfig WHERE id = %s",
+                [cfg.id.hex],
+            )
+            self.assertNotEqual(cursor.fetchone()[0], "put-secret")
+
+    def test_put_mask_does_not_overwrite_existing_secret(self):
+        from leagues.models import OrganizationYouTubeConfig
+
+        cfg = OrganizationYouTubeConfig.objects.create(
+            organization=self.org,
+            youtube_client_secret="original-secret",
+            youtube_refresh_token="original-token",
+        )
+        resp = self.client.put(
+            f"/api/competition/organizations/{self.org.id}/youtube-config",
+            data=json.dumps({
+                "youtube_channel_id": "UC999",
+                "youtube_client_secret": "********",
+                "youtube_refresh_token": "********",
+                "is_enabled": True,
+            }),
+            content_type="application/json",
+            **self._token("cfgadmin"),
+        )
+        self.assertEqual(resp.status_code, 200)
+        cfg.refresh_from_db()
+        self.assertEqual(cfg.youtube_client_secret, "original-secret")
+        self.assertEqual(cfg.youtube_refresh_token, "original-token")
+
+
+class ScheduleLineupAPITestCase(TestCase):
+    """TDD: Restored team/season schedule + game lineup + facilities endpoints."""
+
+    def setUp(self):
+        Organization = apps.get_model('leagues', 'Organization')
+        Season = apps.get_model('leagues', 'Season')
+        Division = apps.get_model('leagues', 'Division')
+        Team = apps.get_model('leagues', 'Team')
+        Player = apps.get_model('profiles', 'Player')
+        Facility = apps.get_model('leagues', 'Facility')
+
+        self.org = Organization.objects.create(name="Sched Org")
+        self.season = Season.objects.create(organization=self.org, season="Spring", year=2026)
+        self.div = Division.objects.create(season=self.season, name="10U")
+        self.home = Team.objects.create(name="Home", division=self.div, access_code="SHOME1")
+        self.away = Team.objects.create(name="Away", division=self.div, access_code="SAWAY1")
+
+        self.facility = Facility.objects.create(
+            organization=self.org, name="Riverside Park",
+            field_name="Field 1", address="123 Main St",
+        )
+
+        self.guardian = User.objects.create_user(username="lineupguardian", password="password123")
+        self.player = Player.objects.create(
+            first_name="Test", last_name="Player", guardian=self.guardian,
+        )
+
+        self.scorer = User.objects.create_user(username="lineupscorer", password="password123")
+        self.scorer.profile.role = "SCORER"
+        self.scorer.profile.organization = self.org
+        self.scorer.profile.save()
+
+        self.parent = User.objects.create_user(username="lineupparent", password="password123")
+        self.parent.profile.role = "PARENT"
+        self.parent.profile.save()
+
+        from .models import Game
+        self.game = Game.objects.create(
+            season=self.season,
+            home_team=self.home,
+            away_team=self.away,
+            date_time="2026-06-01 10:00:00+00",
+            location="Test Field",
+        )
+        self.other_game = Game.objects.create(
+            season=self.season,
+            home_team=self.away,
+            away_team=self.home,
+            date_time="2026-06-02 10:00:00+00",
+            location="Other Field",
+        )
+
+    def _token(self, username):
+        resp = self.client.post("/api/token/pair", json.dumps({
+            "username": username, "password": "password123",
+        }), content_type="application/json")
+        return {"HTTP_AUTHORIZATION": f"Bearer {resp.json()['access']}"}
+
+    def test_team_schedule_returns_games_for_either_side(self):
+        resp = self.client.get(
+            f"/api/competition/team/{self.home.id}/schedule", **self._token("lineupscorer")
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(len(data), 2)
+        self.assertEqual(data[0]["home_team_name"], "Home")
+        self.assertIn("stream_status", data[0])
+
+    def test_season_schedule_returns_all_games(self):
+        resp = self.client.get(
+            f"/api/competition/season/{self.season.id}/schedule", **self._token("lineupscorer")
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.json()), 2)
+
+    def test_get_game_detail(self):
+        resp = self.client.get(
+            f"/api/competition/games/{self.game.id}", **self._token("lineupscorer")
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["id"], str(self.game.id))
+
+    def test_lineup_create_list_update_delete(self):
+        headers = self._token("lineupscorer")
+
+        # create
+        resp = self.client.post(
+            f"/api/competition/games/{self.game.id}/lineup/entries",
+            data=json.dumps({
+                "team_id": str(self.home.id),
+                "player_id": self.player.id,
+                "batting_order": 1,
+                "position": "P",
+            }),
+            content_type="application/json", **headers,
+        )
+        self.assertEqual(resp.status_code, 201)
+        entry = resp.json()
+        self.assertEqual(entry["player_name"], "Test Player")
+        self.assertEqual(entry["division_id"], self.div.id)
+        entry_id = entry["id"]
+
+        # list
+        resp = self.client.get(f"/api/competition/games/{self.game.id}/lineup", **headers)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.json()), 1)
+
+        # update
+        resp = self.client.put(
+            f"/api/competition/games/{self.game.id}/lineup/entries/{entry_id}",
+            data=json.dumps({"batting_order": 2, "position": "C", "is_active": False}),
+            content_type="application/json", **headers,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["batting_order"], 2)
+        self.assertFalse(resp.json()["is_active"])
+
+        # delete
+        resp = self.client.delete(
+            f"/api/competition/games/{self.game.id}/lineup/entries/{entry_id}", **headers
+        )
+        self.assertEqual(resp.status_code, 200)
+        resp = self.client.get(f"/api/competition/games/{self.game.id}/lineup", **headers)
+        self.assertEqual(len(resp.json()), 0)
+
+    def test_lineup_create_forbidden_for_parent(self):
+        resp = self.client.post(
+            f"/api/competition/games/{self.game.id}/lineup/entries",
+            data=json.dumps({
+                "team_id": str(self.home.id),
+                "player_id": self.player.id,
+                "batting_order": 1,
+            }),
+            content_type="application/json", **self._token("lineupparent"),
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_lineup_clone_copies_entries(self):
+        headers = self._token("lineupscorer")
+        self.client.post(
+            f"/api/competition/games/{self.other_game.id}/lineup/entries",
+            data=json.dumps({
+                "team_id": str(self.home.id),
+                "player_id": self.player.id,
+                "batting_order": 3,
+                "position": "SS",
+            }),
+            content_type="application/json", **headers,
+        )
+
+        resp = self.client.post(
+            f"/api/competition/games/{self.game.id}/lineup/clone",
+            data=json.dumps({"source_game_id": str(self.other_game.id)}),
+            content_type="application/json", **headers,
+        )
+        self.assertEqual(resp.status_code, 201)
+        cloned = resp.json()
+        self.assertEqual(len(cloned), 1)
+        self.assertEqual(cloned[0]["batting_order"], 3)
+
+    def test_lineup_clone_404_when_source_empty(self):
+        resp = self.client.post(
+            f"/api/competition/games/{self.game.id}/lineup/clone",
+            data=json.dumps({"source_game_id": str(self.other_game.id)}),
+            content_type="application/json", **self._token("lineupscorer"),
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_facilities_endpoint(self):
+        resp = self.client.get(
+            f"/api/leagues/organizations/{self.org.id}/facilities", **self._token("lineupscorer")
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["name"], "Riverside Park")
+        self.assertEqual(data[0]["field_name"], "Field 1")
+        self.assertIn("Riverside Park", data[0]["display_label"])

@@ -2,6 +2,8 @@ import uuid
 from django.db import models
 from django.contrib.auth.models import User
 
+from .fields import EncryptedTextField
+
 
 class SeasonType(models.TextChoices):
     SPRING = 'Spring', 'Spring'
@@ -115,8 +117,8 @@ class OrganizationYouTubeConfig(models.Model):
     organization = models.OneToOneField(Organization, on_delete=models.CASCADE, related_name="youtube_config")
     youtube_channel_id = models.CharField(max_length=100, blank=True, help_text="YouTube Channel ID (e.g., UC...)")
     youtube_client_id = models.CharField(max_length=255, blank=True)
-    youtube_client_secret = models.CharField(max_length=255, blank=True, help_text="POC: plaintext; encrypt in prod")
-    youtube_refresh_token = models.CharField(max_length=255, blank=True, help_text="POC: plaintext; encrypt in prod")
+    youtube_client_secret = EncryptedTextField(blank=True, help_text="Encrypted at rest")
+    youtube_refresh_token = EncryptedTextField(blank=True, help_text="Encrypted at rest")
     streaming_server_srt_url = models.CharField(max_length=255, blank=True, help_text="SRT base URL e.g. srt://relay.example.com:10080")
     privacy_status = models.CharField(
         max_length=20,

@@ -111,6 +111,39 @@ Hierarchy: Organization → Season → Division → Team.
 - `AdminScheduleViewModel.kt` — rewritten with full scheduling support (weekly status, schedule game, location conflicts, week navigation, org settings)
 - `AdminScheduleScreen.kt` — 9 composable sections (season/division pickers, week nav, team counts with progress bars, schedule game form, location conflicts, org settings editor)
 
+## YouTube Streaming (Backend + Android)
+
+Self-hosted SRT→YouTube live pipeline. Branch `feature/youtube-streaming`.
+
+**Data path:** Larix (SRT) → SRS :10080/udp → [relay-agent: ffmpeg] → YouTube RTMP ingest.
+SRT URL: `srt://<relay-host>:10080?streamid=live/game-<game_id>`.
+
+### Backend
+- `competition/models.py:Game` — stream fields: `stream_status` (`idle|preparing|live|ended|error`), `youtube_video_id`, `youtube_broadcast_id`, `youtube_stream_id`, `srt_stream_id`, `stream_started_at`, `stream_ended_at`, `is_streaming_enabled`, `stream_error`.
+- `leagues/models.py:OrganizationYouTubeConfig` — per-org channel + OAuth creds; `youtube_client_secret`/`youtube_refresh_token` use `EncryptedTextField` (`leagues/fields.py`, Fernet; key = `STREAMING_ENCRYPTION_KEY` or `SECRET_KEY`).
+- `competition/streaming/youtube.py:YouTubeLiveService` — `create_broadcast`/`create_stream`/`bind_broadcast`/`transition_broadcast`/`get_stream_health`/`complete_broadcast`/`delete_*`; falls back to `YOUTUBE_FALLBACK_*` settings when org has no config.
+- `competition/streaming/relay.py` — stdlib client for the relay agent (`start_relay`/`stop_relay`/`relay_status`/`agent_health`).
+- `competition/streaming/oauth.py` — per-org channel onboarding (signed single-use state via cache, code exchange, channel fetch).
+- `competition/management/commands/reconcile_streams.py` — polls `preparing` games, promotes to `live` when YouTube health is `active`, else `error` after `STREAM_RECONCILE_TIMEOUT` (default 180s). Run via cron/systemd-timer (documented in `ops/streaming/README.md`).
+- **Endpoints** (`competition/api.py`): `POST /games/{id}/stream/start` (idempotent while `preparing`/`live`), `POST /games/{id}/stream/stop`, `GET /games/{id}/stream/status`; `GET/PUT /organizations/{id}/youtube-config` (admin-only; secrets masked as `********`, PUT body auto-encrypts via the model field); `GET /organizations/{id}/youtube/oauth/start`, public `GET /youtube/oauth/callback`.
+- Admin: stream fields/filters/actions on `GameAdmin`; `OrganizationYouTubeConfigAdmin`.
+- Tests: `competition/tests.py` — ScoringEngine, RelayClient, YouTubeService, StreamLifecycle, ReconcileStreamsCommand, YouTubeOAuthClient/API, StreamingSecretEncryption, YouTubeConfigAPI.
+
+### Android
+- API: `startStream`/`stopStream`/`getStreamStatus`, `getYoutubeConfig`, `getYoutubeOAuthStart`.
+- Deep link `diamondmanager://youtube` (MainActivity `singleTask` + VIEW/BROWSABLE intent-filter); `data/OAuthDeepLink.kt` parses the OAuth callback redirect.
+- `ui/screens/admin/AdminStreamingScreen.kt` + `AdminStreamingViewModel.kt` — connect/reconnect a YouTube channel; opened from `AdminDashboardScreen`.
+- `GameDayScreen`/`GameDayViewModel` surface `stream_error` and stream status.
+
+### Ops
+- `ops/streaming/` — `docker-compose.yml` (SRS + relay-agent), `srs.conf*`, `relay-agent/` (FastAPI+ffmpeg), `.env.example`, `README.md`.
+- Caveats: Docker CLI not available in this WSL distro (can't validate compose); no JDK in WSL (Android builds verified in Android Studio only).
+
+### Note
+- `GET /api/competition/team|season/{id}/schedule`, `GET /api/competition/games/{id}`, `GET/POST/PUT/DELETE /api/competition/games/{id}/lineup[/entries|/clone]`, and `GET /api/leagues/organizations/{id}/facilities` were removed in commit `6321fce`; they have been **restored** on `feature/youtube-streaming` (tests: `ScheduleLineupAPITestCase`). `facilities` also still exists as a Django view (`profiles/views.py:FacilityManageView`).
+- Pre-existing gap (not introduced by the restore): `PUT/DELETE /games/{id}/lineup/entries/{entry_id}` have no `_can_score` check (matches the pre-`6321fce` original).
+- `GET /api/competition/games/{id}/stream` (SSE push) that Android `GameEventService` calls does **not** exist yet; scoreboard falls back to its snapshot (SSE error is swallowed).
+
 ### On Deck (not yet started)
 - `clone_divisions` missing `preset_type` in defaults — **Fixed ✅**
 - Live scoring future work:

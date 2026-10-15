@@ -133,6 +133,14 @@ class LineupEntryCreateSchema(Schema):
     batting_order: int
     position: Optional[str] = None
 
+class LineupEntryUpdateSchema(Schema):
+    batting_order: Optional[int] = None
+    position: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class CloneLineupSchema(Schema):
+    source_game_id: UUID4
+
 # --- Scheduling Schemas ---
 
 class TeamEventSchema(Schema):
