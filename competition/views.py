@@ -1,5 +1,10 @@
+import json
+import time
+from queue import Empty
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import HttpResponse, StreamingHttpResponse
 from django.contrib import messages
 from django.views.generic import ListView, CreateView, UpdateView, DetailView, TemplateView, View, FormView
 from django.db.models import Q
@@ -1163,4 +1168,85 @@ class GameScoreView(LoginRequiredMixin, View):
         ).values_list('team_id', flat=True))
         all_ids = team_ids | membership_ids
         return game.home_team_id in all_ids or game.away_team_id in all_ids
+
+
+# ---------------------------------------------------------------------------
+# Live scoreboard Server-Sent Events (SSE)
+# ---------------------------------------------------------------------------
+
+def _game_event_stream(game_id, poll_seconds=2.0, heartbeat_seconds=15.0):
+    """Yield SSE messages with the latest game snapshot.
+
+    Updates are pushed immediately via :func:`competition.sse.publish` and, as a
+    fallback, polled every ``poll_seconds`` so a missed publish still recovers.
+    A comment heartbeat is emitted when nothing changes for ``heartbeat_seconds``.
+    """
+    from django.db import DatabaseError
+    from . import sse
+
+    queue = sse.subscribe(game_id)
+    last_payload = None
+    last_emit = time.monotonic()
+    try:
+        while True:
+            try:
+                game = (
+                    Game.objects.filter(id=game_id)
+                    .select_related('home_team', 'away_team')
+                    .first()
+                )
+            except DatabaseError:
+                time.sleep(poll_seconds)
+                continue
+
+            if game is None:
+                yield 'event: error\ndata: {"detail": "Game not found"}\n\n'
+                break
+
+            payload = json.dumps(sse.game_to_sse_data(game), default=str)
+            if payload != last_payload:
+                yield f'data: {payload}\n\n'
+                last_payload = payload
+                last_emit = time.monotonic()
+            elif time.monotonic() - last_emit >= heartbeat_seconds:
+                yield ': keep-alive\n\n'
+                last_emit = time.monotonic()
+
+            if game.is_completed:
+                break
+
+            try:
+                queue.get(timeout=poll_seconds)
+            except Empty:
+                pass
+    finally:
+        sse.unsubscribe(game_id, queue)
+
+
+def game_stream(request, game_id):
+    """SSE endpoint streaming live scoreboard updates for a game.
+
+    Requires a valid JWT (``Authorization: Bearer <token>``) — the Android client
+    attaches it automatically. Mirrors ``GET /api/competition/games/{id}/stream``.
+    """
+    from ninja_jwt.authentication import JWTAuth
+
+    try:
+        user = JWTAuth()(request)
+    except Exception:
+        user = None
+    if user is None:
+        return HttpResponse(status=401)
+
+    if not Game.objects.filter(id=game_id).exists():
+        return HttpResponse(status=404)
+
+    response = StreamingHttpResponse(
+        _game_event_stream(str(game_id)),
+        content_type='text/event-stream',
+    )
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'  # disable buffering in nginx-style proxies
+    return response
+
 

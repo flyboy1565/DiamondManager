@@ -31,19 +31,31 @@ def publish(game_id: str, event: str, data: dict):
 
 
 def game_to_sse_data(game):
+    """Full game payload pushed to SSE subscribers.
+
+    Matches the Android ``GameData`` model (all required fields present) so the
+    client can decode each event directly.
+    """
     return {
         "id": str(game.id),
-        "home_score": game.home_score,
-        "away_score": game.away_score,
-        "is_live": game.is_live,
-        "current_inning": game.current_inning,
-        "is_top_inning": game.is_top_inning,
-        "outs": game.outs,
-        "balls": game.balls,
-        "strikes": game.strikes,
-        "pitch_count": game.pitch_count,
-        "is_completed": game.is_completed,
+        "season_id": str(game.season_id),
+        "home_team_id": str(game.home_team_id),
+        "away_team_id": str(game.away_team_id),
         "home_team_name": game.home_team.name,
         "away_team_name": game.away_team.name,
+        "date_time": game.date_time,
+        "location": game.location,
+        "home_score": game.home_score or 0,
+        "away_score": game.away_score or 0,
+        "is_live": game.is_live,
+        "current_inning": game.current_inning or 1,
+        "is_top_inning": game.is_top_inning,
+        "outs": game.outs or 0,
+        "balls": game.balls or 0,
+        "strikes": game.strikes or 0,
+        "pitch_count": game.pitch_count or 0,
+        "is_completed": game.is_completed,
         "scoring_data": game.scoring_data,
+        "stream_status": game.stream_status,
+        "youtube_video_id": game.youtube_video_id,
     }

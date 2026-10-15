@@ -2205,3 +2205,114 @@ class ScheduleLineupAPITestCase(TestCase):
         self.assertEqual(data[0]["name"], "Riverside Park")
         self.assertEqual(data[0]["field_name"], "Field 1")
         self.assertIn("Riverside Park", data[0]["display_label"])
+
+
+class GameStreamSSETestCase(TestCase):
+    """TDD: Live scoreboard Server-Sent Events endpoint."""
+
+    def setUp(self):
+        Organization = apps.get_model('leagues', 'Organization')
+        Season = apps.get_model('leagues', 'Season')
+        Division = apps.get_model('leagues', 'Division')
+        Team = apps.get_model('leagues', 'Team')
+
+        self.org = Organization.objects.create(name="SSE Org")
+        self.season = Season.objects.create(organization=self.org, season="Spring", year=2026)
+        self.div = Division.objects.create(season=self.season, name="10U")
+        self.home = Team.objects.create(name="Home", division=self.div, access_code="SSEHOME")
+        self.away = Team.objects.create(name="Away", division=self.div, access_code="SSEAWAY")
+
+        self.viewer = User.objects.create_user(username="sseviewer", password="password123")
+        self.scorer = User.objects.create_user(username="ssescorer", password="password123")
+        self.scorer.profile.role = "SCORER"
+        self.scorer.profile.organization = self.org
+        self.scorer.profile.save()
+
+        from .models import Game
+        self.game = Game.objects.create(
+            season=self.season,
+            home_team=self.home,
+            away_team=self.away,
+            date_time="2026-06-01 10:00:00+00",
+            location="Test Field",
+        )
+
+    def _token(self, username):
+        resp = self.client.post("/api/token/pair", json.dumps({
+            "username": username, "password": "password123",
+        }), content_type="application/json")
+        return {"HTTP_AUTHORIZATION": f"Bearer {resp.json()['access']}"}
+
+    def _url(self):
+        return f"/api/competition/games/{self.game.id}/stream"
+
+    def test_stream_requires_auth(self):
+        resp = self.client.get(self._url())
+        self.assertEqual(resp.status_code, 401)
+
+    def test_stream_unknown_game_404(self):
+        import uuid as _uuid
+        resp = self.client.get(
+            f"/api/competition/games/{_uuid.uuid4()}/stream", **self._token("sseviewer")
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_stream_sends_initial_snapshot_for_completed_game(self):
+        self.game.is_completed = True
+        self.game.home_score = 3
+        self.game.away_score = 2
+        self.game.save()
+
+        resp = self.client.get(self._url(), **self._token("sseviewer"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "text/event-stream")
+
+        chunks = [c.decode() if isinstance(c, bytes) else c for c in resp.streaming_content]
+        self.assertTrue(chunks)
+        self.assertTrue(chunks[0].startswith("data: "))
+        payload = json.loads(chunks[0][len("data: "):])
+        self.assertEqual(payload["id"], str(self.game.id))
+        self.assertEqual(payload["home_score"], 3)
+        self.assertEqual(payload["home_team_name"], "Home")
+        self.assertEqual(payload["stream_status"], self.game.stream_status)
+
+    def test_stream_pushes_update_after_publish(self):
+        from . import sse
+
+        resp = self.client.get(self._url(), **self._token("sseviewer"))
+        self.assertEqual(resp.status_code, 200)
+        iterator = iter(resp.streaming_content)
+
+        first = next(iterator)
+        first = first.decode() if isinstance(first, bytes) else first
+        self.assertIn('"home_score": 0', first)
+
+        # Mutate and notify subscribers.
+        self.game.home_score = 7
+        self.game.save(update_fields=["home_score"])
+        sse.publish(str(self.game.id), "update", {})
+
+        second = next(iterator)
+        second = second.decode() if isinstance(second, bytes) else second
+        self.assertTrue(second.startswith("data: "))
+        self.assertIn('"home_score": 7', second)
+
+        resp.close()
+
+    def test_record_pitch_publishes_update(self):
+        from . import sse
+
+        queue = sse.subscribe(str(self.game.id))
+        try:
+            resp = self.client.post(
+                f"/api/competition/games/{self.game.id}/record-pitch",
+                data=json.dumps({"type": "strike"}),
+                content_type="application/json", **self._token("ssescorer"),
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertFalse(queue.empty())
+            event, data = queue.get_nowait()
+            self.assertEqual(event, "update")
+            self.assertEqual(data["id"], str(self.game.id))
+        finally:
+            sse.unsubscribe(str(self.game.id), queue)

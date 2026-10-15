@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.conf import settings
 
 from .models import TeamEvent, Game, GameLineupEntry, ScoringToken
+from . import sse
 from .schemas import (
     TeamEventSchema, TeamEventCreateSchema, TeamEventUpdateSchema,
     GameSchema, LineupEntrySchema, LineupEntryCreateSchema,
@@ -599,6 +600,7 @@ def start_stream(request, game_id: str):
             game.stream_error = 'YouTube did not return an ingest address/key'
             game.save(update_fields=['stream_error'])
 
+    _publish_game(game)
     return _build_stream_response(game)
 
 
@@ -625,6 +627,7 @@ def stop_stream(request, game_id: str):
     game.stream_ended_at = timezone.now()
     game.is_streaming_enabled = False
     game.save(update_fields=['stream_status', 'stream_ended_at', 'is_streaming_enabled'])
+    _publish_game(game)
     return {"status": "ok", "stream_status": game.stream_status}
 
 
@@ -658,32 +661,6 @@ def get_scoreboard(request, game_id: UUID):
     )
 
 
-def _game_dict(game):
-    return {
-        'id': game.id,
-        'season_id': game.season_id,
-        'home_team_id': game.home_team_id,
-        'away_team_id': game.away_team_id,
-        'home_team_name': game.home_team.name,
-        'away_team_name': game.away_team.name,
-        'date_time': game.date_time,
-        'location': game.location,
-        'home_score': game.home_score,
-        'away_score': game.away_score,
-        'is_live': game.is_live,
-        'current_inning': game.current_inning,
-        'is_top_inning': game.is_top_inning,
-        'outs': game.outs,
-        'balls': game.balls,
-        'strikes': game.strikes,
-        'pitch_count': game.pitch_count,
-        'is_completed': game.is_completed,
-        'scoring_data': game.scoring_data,
-        'stream_status': game.stream_status,
-        'youtube_video_id': game.youtube_video_id,
-    }
-
-
 def _lineup_entry_dict(entry):
     return {
         'id': entry.id,
@@ -698,6 +675,14 @@ def _lineup_entry_dict(entry):
     }
 
 
+def _publish_game(game):
+    """Notify SSE subscribers that a game's state changed (best-effort)."""
+    try:
+        sse.publish(str(game.id), 'update', sse.game_to_sse_data(game))
+    except Exception:
+        pass
+
+
 # ------------------------------------------------------------------
 # Schedule API endpoints
 # ------------------------------------------------------------------
@@ -705,7 +690,7 @@ def _lineup_entry_dict(entry):
 @router.get("/season/{season_id}/schedule", response=List[schemas.GameSchema])
 def list_season_schedule(request, season_id: UUID):
     games = Game.objects.filter(season_id=season_id).select_related('home_team', 'away_team')
-    return [_game_dict(g) for g in games]
+    return [_game_to_dict(g) for g in games]
 
 
 @router.get("/team/{team_id}/schedule", response=List[schemas.GameSchema])
@@ -713,13 +698,13 @@ def get_team_schedule(request, team_id: UUID):
     games = Game.objects.filter(
         Q(home_team_id=team_id) | Q(away_team_id=team_id)
     ).select_related('home_team', 'away_team')
-    return [_game_dict(g) for g in games]
+    return [_game_to_dict(g) for g in games]
 
 
 @router.get("/games/{game_id}", response=schemas.GameSchema)
 def get_game(request, game_id: UUID):
     game = get_object_or_404(Game, id=game_id)
-    return _game_dict(game)
+    return _game_to_dict(game)
 
 
 # ------------------------------------------------------------------
@@ -1163,6 +1148,7 @@ def start_game(request, game_id: UUID):
     _init_scoring_data(game)
     game.is_live = True
     game.save()
+    _publish_game(game)
 
     return {
         **game.__dict__,
@@ -1184,6 +1170,7 @@ def end_game(request, game_id: UUID, data: schemas.EndGameSchema):
 
     game.is_completed = True
     game.save()
+    _publish_game(game)
 
     return {
         **game.__dict__,
@@ -1209,6 +1196,7 @@ def live_update_game(request, game_id: UUID, data: schemas.GameLiveUpdateSchema)
         setattr(game, attr, value)
     
     game.save()
+    _publish_game(game)
     
     # Map names for the display (Android-friendly)
     return {
@@ -1241,6 +1229,7 @@ def set_batter(request, game_id: UUID, data: schemas.SetBatterSchema):
             game.scoring_data['batting_order_idx'][side] = lineup.index(data.player_id)
 
     game.save()
+    _publish_game(game)
     return _game_to_dict(game)
 
 
@@ -1258,6 +1247,7 @@ def record_pitch(request, game_id: UUID, data: schemas.RecordPitchSchema):
 
     _apply_record_pitch(game, data.type, extra=getattr(data, 'extra', None))
     game.save()
+    _publish_game(game)
     return _game_to_dict(game)
 
 
@@ -1290,6 +1280,7 @@ def undo_last_pitch(request, game_id: UUID):
         game.is_top_inning = True
 
     game.save()
+    _publish_game(game)
     return _game_to_dict(game)
 
 
@@ -1333,6 +1324,7 @@ def score_via_token(request, game_id: UUID, token: str, data: schemas.RecordPitc
 
     _apply_record_pitch(game, data.type, extra=getattr(data, 'extra', None))
     game.save()
+    _publish_game(game)
     return _game_to_dict(game)
 
 
