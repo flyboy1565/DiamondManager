@@ -7,3 +7,7 @@ __pycache__/
 db.sqlite3
 
 .venv/*
+
+# Local environment / secrets
+.env
+*.env
